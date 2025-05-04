@@ -2,6 +2,7 @@ pub mod glv;
 pub mod wnaf;
 
 pub mod variable_base;
+pub mod fixed_base;
 
 use crate::{AffineRepr, PrimeGroup};
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField};
