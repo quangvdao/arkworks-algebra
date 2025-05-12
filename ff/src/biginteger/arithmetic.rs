@@ -112,6 +112,92 @@ pub const fn mac_with_carry(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
     tmp as u64
 }
 
+// Some helpers from Yuvals codebase
+// I unrolled this -- as it gives performance optimisation
+// Technically, later there is a way to fully unroll this generically
+// with macros TODO
+#[inline(always)]
+pub fn addv(mut a: [u64; 5], b: [u64; 5]) -> [u64; 5] {
+    let mut carry: u64;
+
+    // Limb 0
+    let sum0 = a[0] as u128 + b[0] as u128;
+    a[0] = sum0 as u64;
+    carry = (sum0 >> 64) as u64;
+
+    // Limb 1
+    let sum1 = a[1] as u128 + b[1] as u128 + carry as u128;
+    a[1] = sum1 as u64;
+    carry = (sum1 >> 64) as u64;
+
+    // Limb 2
+    let sum2 = a[2] as u128 + b[2] as u128 + carry as u128;
+    a[2] = sum2 as u64;
+    carry = (sum2 >> 64) as u64;
+
+    // Limb 3
+    let sum3 = a[3] as u128 + b[3] as u128 + carry as u128;
+    a[3] = sum3 as u64;
+    carry = (sum3 >> 64) as u64;
+
+    // Limb 4
+    let sum4 = a[4] as u128 + b[4] as u128 + carry as u128;
+    a[4] = sum4 as u64;
+    // final carry is discarded
+
+    a
+}
+
+#[inline(always)]
+pub fn reduce_ct(a: [u64; 4], two_p: [u64; 4]) -> [u64; 4] {
+    let b = [[0_u64; 4], two_p];
+    let msb = (a[3] >> 63) & 1;
+    ysub(a, b[msb as usize])
+}
+// This is just nameed as ysub for now : it should be sub
+//#[inline(always)]
+//pub fn ysub<const N: usize>(a: [u64; N], b: [u64; N]) -> [u64; N] {
+//    let mut borrow: i128 = 0;
+//    let mut c = [0; N];
+//    for i in 0..N {
+//        let tmp = a[i] as i128 - b[i] as i128 + borrow as i128;
+//        c[i] = tmp as u64;
+//        borrow = tmp >> 64
+//    }
+//    c
+//}
+
+// Once again unrolled to potentially speed things
+#[inline(always)]
+pub fn ysub(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+    let mut borrow: i128 = 0;
+    let mut c = [0; 4];
+
+    let tmp = a[0] as i128 - b[0] as i128 + borrow as i128;
+    c[0] = tmp as u64;
+    borrow = tmp >> 64;
+
+    let tmp = a[1] as i128 - b[1] as i128 + borrow as i128;
+    c[1] = tmp as u64;
+    borrow = tmp >> 64;
+
+    let tmp = a[2] as i128 - b[2] as i128 + borrow as i128;
+    c[2] = tmp as u64;
+    borrow = tmp >> 64;
+
+    let tmp = a[3] as i128 - b[3] as i128 + borrow as i128;
+    c[3] = tmp as u64;
+    borrow = tmp >> 64;
+
+    c
+}
+
+#[inline(always)]
+pub fn carrying_mul_add(a: u64, b: u64, add: u64, carry: u64) -> (u64, u64) {
+    let c: u128 = a as u128 * b as u128 + carry as u128 + add as u128;
+    (c as u64, (c >> 64) as u64)
+}
+
 /// Compute the NAF (non-adjacent form) of num
 pub fn find_naf(num: &[u64]) -> Vec<i8> {
     let mut num = num.to_vec();
