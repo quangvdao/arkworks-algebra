@@ -1,5 +1,4 @@
 use quote::quote;
-
 pub(super) fn mul_assign_impl(
     can_use_no_carry_mul_opt: bool,
     yd_opt: bool,
@@ -19,7 +18,6 @@ pub(super) fn mul_assign_impl(
         0xb85045b68181585d,
         0x30644e72e131a029,
     ];
-
     // RIGHT now this is just for BN_255
     if yd_opt
         && num_limbs == 4
@@ -29,122 +27,128 @@ pub(super) fn mul_assign_impl(
         && modulus_3 == U64_P[3]
     {
         body.extend(quote! {
-                macro_rules! subarray {
-                ($t:expr, $b: literal, $l: literal) => {
-                {
-                 use seq_macro::seq;
-                 let t = $t;
-                 let mut s = [0;$l];
+            // The precomputed multiplications!
 
-                // The compiler does not detect out-of-bounds when using `for` therefore `seq!` is used here
-                seq!(i in 0..$l {
-                s[i] = t[$b+i];
-                 });
-                s
-                }
-            };}
-        });
-        //
-        let double_limbs = num_limbs * 2;
-        body.extend(quote! {
-            let mut t = [0u64; #double_limbs];
-            let mut carry = 0;
+            let (c00hi, c00lo) = fa::mult((a.0).0[0], (b.0).0[0]);
+            let (c01hi, c01lo) = fa::mult((a.0).0[0], (b.0).0[1]);
+            let (c02hi, c02lo) = fa::mult((a.0).0[0], (b.0).0[2]);
+            let (c03hi, c03lo) = fa::mult((a.0).0[0], (b.0).0[3]);
 
-            (t[0], carry) = fa::carrying_mul_add(a.0.0[0], b.0.0[0], t[0], carry);
-            (t[1], carry) = fa::carrying_mul_add(a.0.0[0], b.0.0[1], t[1], carry);
-            (t[2], carry) = fa::carrying_mul_add(a.0.0[0], b.0.0[2], t[2], carry);
-            (t[3], carry) = fa::carrying_mul_add(a.0.0[0], b.0.0[3], t[3], carry);
-            t[4] = carry;
-            carry = 0;
-            (t[1], carry) = fa::carrying_mul_add(a.0.0[1], b.0.0[0], t[1], carry);
-            (t[2], carry) = fa::carrying_mul_add(a.0.0[1], b.0.0[1], t[2], carry);
-            (t[3], carry) = fa::carrying_mul_add(a.0.0[1], b.0.0[2], t[3], carry);
-            (t[4], carry) = fa::carrying_mul_add(a.0.0[1], b.0.0[3], t[4], carry);
-            t[5] = carry;
-            carry = 0;
-            (t[2], carry) = fa::carrying_mul_add(a.0.0[2], b.0.0[0], t[2], carry);
-            (t[3], carry) = fa::carrying_mul_add(a.0.0[2], b.0.0[1], t[3], carry);
-            (t[4], carry) = fa::carrying_mul_add(a.0.0[2], b.0.0[2], t[4], carry);
-            (t[5], carry) = fa::carrying_mul_add(a.0.0[2], b.0.0[3], t[5], carry);
-            t[6] = carry;
-            carry = 0;
-            (t[3], carry) = fa::carrying_mul_add(a.0.0[3], b.0.0[0], t[3], carry);
-            (t[4], carry) = fa::carrying_mul_add(a.0.0[3], b.0.0[1], t[4], carry);
-            (t[5], carry) = fa::carrying_mul_add(a.0.0[3], b.0.0[2], t[5], carry);
-            (t[6], carry) = fa::carrying_mul_add(a.0.0[3], b.0.0[3], t[6], carry);
-            t[7] = carry;
-        });
+            let (c10hi, c10lo) = fa::mult((a.0).0[1], (b.0).0[0]);
+            let (c11hi, c11lo) = fa::mult((a.0).0[1], (b.0).0[1]);
+            let (c12hi, c12lo) = fa::mult((a.0).0[1], (b.0).0[2]);
+            let (c13hi, c13lo) = fa::mult((a.0).0[1], (b.0).0[3]);
 
-        //for i in 0..num_limbs {
-        //    body.extend(quote! { let mut carry = 0u64; });
-        //    for j in 0..num_limbs {
-        //        let k = i + j;
-        //        body.extend(quote!{t[#k] = fa::mac_with_carry(t[#k], (a.0).0[#i], (b.0).0[#j], &mut carry);});
-        //    }
-        //    body.extend(quote! { t[#i + #num_limbs] = carry; });
-        //}
+            let (c20hi, c20lo) = fa::mult((a.0).0[2], (b.0).0[0]);
+            let (c21hi, c21lo) = fa::mult((a.0).0[2], (b.0).0[1]);
+            let (c22hi, c22lo) = fa::mult((a.0).0[2], (b.0).0[2]);
+            let (c23hi, c23lo) = fa::mult((a.0).0[2], (b.0).0[3]);
 
-        // The precomputed multiplications!
-        body.extend(quote! {
-            let mut sub_arr = subarray!(t, 3, 5);
-            let mut s_r1 = [0_u64; 5]; // TODO: Make this general later should be num_limbs//2 + 1
-            let mut s_r2 = [0_u64; 5]; // TODO
-            let mut s_r3 = [0_u64; 5]; // TODO
+            let (c30hi, c30lo) = fa::mult((a.0).0[3], (b.0).0[0]);
+            let (c31hi, c31lo) = fa::mult((a.0).0[3], (b.0).0[1]);
+            let (c32hi, c32lo) = fa::mult((a.0).0[3], (b.0).0[2]);
+            let (c33hi, c33lo) = fa::mult((a.0).0[3], (b.0).0[3]);
 
-            (s_r1[0], s_r1[1]) = fa::carrying_mul_add(t[0], constants::U64_I3[0], 0, 0);
-            (s_r1[1], s_r1[2]) = fa::carrying_mul_add(t[0], constants::U64_I3[1], s_r1[1], 0);
-            (s_r1[2], s_r1[3]) = fa::carrying_mul_add(t[0], constants::U64_I3[2], s_r1[2], 0);
-            (s_r1[3], s_r1[4]) = fa::carrying_mul_add(t[0], constants::U64_I3[3], s_r1[3], 0);
+            let mut c: bool;
+            let mut r0 = 0u128;
+            let mut r1 = 0u128;
+            let mut r2 = 0u128;
+            let mut r3 = 0u128;
 
-            (s_r2[0], s_r2[1]) = fa::carrying_mul_add(t[1], constants::U64_I2[0], 0, 0);
-            (s_r2[1], s_r2[2]) = fa::carrying_mul_add(t[1], constants::U64_I2[1], s_r2[1], 0);
-            (s_r2[2], s_r2[3]) = fa::carrying_mul_add(t[1], constants::U64_I2[2], s_r2[2], 0);
-            (s_r2[3], s_r2[4]) = fa::carrying_mul_add(t[1], constants::U64_I2[3], s_r2[3], 0);
+            (r0, _) = fa::wadd(c00hi, c00lo, r0, false);
 
-            (s_r3[0], s_r3[1]) = fa::carrying_mul_add(t[2], constants::U64_I1[0], 0, 0);
-            (s_r3[1], s_r3[2]) = fa::carrying_mul_add(t[2], constants::U64_I1[1], s_r3[1], 0);
-            (s_r3[2], s_r3[3]) = fa::carrying_mul_add(t[2], constants::U64_I1[2], s_r3[2], 0);
-            (s_r3[3], s_r3[4]) = fa::carrying_mul_add(t[2], constants::U64_I1[3], s_r3[3], 0);
+            (r0, c) = fa::wadd(c01lo, 0u64, r0, false);
+            (r1, _) = fa::wadd(c11hi, c11lo, r1, c);
 
-        });
+            (r0, c) = fa::wadd(c10lo, 0u64, r0, false);
+            (r1, c) = fa::wadd(c12lo, c01hi, r1, c);
+            (r2, _) = fa::wadd(0u64, c12hi, r2, c);
 
-        // mac_with_carry and carrying_mul_add do the same thing -- but using already existing
-        // arkworks helpers to be consistent.
-        // TODO: These constants here are the only things that make this code base not generic, but can
-        // be fixed later.
-        //for i in 0..num_limbs {
-        //    body.extend(quote!{
-        //        s_r1[#i] = fa::mac_with_carry(s_r1[#i], t[0], constants::U64_I3[#i], &mut s_r1[#i+1]);
-        //        s_r2[#i] = fa::mac_with_carry(s_r2[#i], t[1], constants::U64_I2[#i], &mut s_r2[#i+1]);
-        //        s_r3[#i] = fa::mac_with_carry(s_r3[#i], t[2], constants::U64_I1[#i], &mut s_r3[#i+1]);
-        //    });
-        //}
-        //
-        body.extend(quote! {
-        let s = fa::addv(fa::addv(subarray!(t, 3, 5), s_r1), fa::addv(s_r2, s_r3));
-        });
+            (r1, c) = fa::wadd(c21lo, c10hi, r1, false);
+            (r2, _) = fa::wadd(0u64, c21hi, r2, c);
 
-        body.extend(quote! {
-            let m = s[0].wrapping_mul(Self::INV);
-            let mut mp = [0_u64; 5]; // TODO: Make this general later; change this to limbs
-            (mp[0], mp[1]) = fa::carrying_mul_add(m, #modulus_0, mp[0], 0);
-            (mp[1], mp[2]) = fa::carrying_mul_add(m, #modulus_1, mp[1], 0);
-            (mp[2], mp[3]) = fa::carrying_mul_add(m, #modulus_2, mp[2], 0);
-            (mp[3], mp[4]) = fa::carrying_mul_add(m, #modulus_3, mp[3], 0);
+            (r1, c) = fa::wadd(c02hi, c02lo, r1, false);
+            (r2, _) = fa::wadd(c13hi, c13lo, r2, c); // ignore c - limited to input < p
 
-        });
+            (r1, c) = fa::wadd(c20hi, c20lo, r1, false);
+            (r2, _) = fa::wadd(c31hi, c31lo, r2, c); // ignore c - limited to input < p
 
-        //for i in 0..num_limbs {
-        //    let mod_limb_i = modulus_limbs[i];
-        //    body.extend(quote! {
-        //        mp[#i] = fa::mac_with_carry(mp[#i], m, #mod_limb_i, &mut mp[#i+1]);
-        //    });
-        //}
+            (r1, c) = fa::wadd(c03lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(c23lo, c03hi, r2, c);
+            (r3, _) = fa::wadd(0u64, c23hi, r3, c);
 
-        // TODO: handle the constants better
-        body.extend(quote! {
-            let r = fa::reduce_ct(subarray!(fa::addv(s, mp), 1, 4), constants::U64_2P);
-            (a.0).0 = r;
+            (r1, c) = fa::wadd(c30lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(c32lo, c30hi, r2, c);
+            (r3, _) = fa::wadd(0u64, c32hi, r3, c);
+
+           const U64_I2: [u64; 4] = [
+                0x18ee753c76f9dc6f,
+                0x54ad7e14a329e70f,
+                0x2b16366f4f7684df,
+                0x133100d71fdf3579,
+            ];
+            let (r0hi, r0lo) = ((r0 >> 64) as u64, r0 as u64);
+            let (ir000hi, ir000lo) = fa::mult(r0lo, U64_I2[0]);
+            let (ir001hi, ir001lo) = fa::mult(r0lo, U64_I2[1]);
+            let (ir002hi, ir002lo) = fa::mult(r0lo, U64_I2[2]);
+            let (ir003hi, ir003lo) = fa::mult(r0lo, U64_I2[3]);
+            let (ir010hi, ir010lo) = fa::mult(r0hi, U64_I2[0]);
+            let (ir011hi, ir011lo) = fa::mult(r0hi, U64_I2[1]);
+            let (ir012hi, ir012lo) = fa::mult(r0hi, U64_I2[2]);
+            let (ir013hi, ir013lo) = fa::mult(r0hi, U64_I2[3]);
+
+            (r1, c) = fa::wadd(ir000hi, ir000lo, r1, false);
+            (r2, c) = fa::wadd(c22hi, c22lo, r2, c);
+            (r3, _) = fa::wadd(c33hi, c33lo, r3, c);
+
+            (r1, c) = fa::wadd(ir001lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(ir002hi, ir002lo, r2, c);
+            (r3, _) = fa::wadd(0u64, ir003hi, r3, c);
+
+            (r1, c) = fa::wadd(ir010lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(ir003lo, ir001hi, r2, c);
+            (r3, _) = fa::wadd(0u64, ir012hi, r3, c);
+
+            const U64_I1: [u64; 4] = [
+                0x2d3e8053e396ee4d,
+                0xca478dbeab3c92cd,
+                0xb2d8f06f77f52a93,
+                0x24d6ba07f7aa8f04,
+            ];
+            let r1lo = r1 as u64;
+            let (ir100hi, ir100lo) = fa::mult(r1lo, U64_I1[0]);
+            let (ir101hi, ir101lo) = fa::mult(r1lo, U64_I1[1]);
+            let (ir102hi, ir102lo) = fa::mult(r1lo, U64_I1[2]);
+            let (ir103hi, ir103lo) = fa::mult(r1lo, U64_I1[3]);
+
+            (r1, c) = fa::wadd(ir100lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(ir012lo, ir010hi, r2, c);
+            (r3, _) = fa::wadd(ir013hi, ir013lo, r3, c);
+
+            let m = (Self::INV).wrapping_mul((r1 >> 64) as u64);
+            let (m0hi, m0lo) = fa::mult(m, #modulus_0);
+            let (m1hi, m1lo) = fa::mult(m, #modulus_1);
+            let (m2hi, m2lo) = fa::mult(m, #modulus_2);
+            let (m3hi, m3lo) = fa::mult(m, #modulus_3);
+
+            (_, c) = fa::wadd(m0lo, 0u64, r1, false);
+            (r2, c) = fa::wadd(ir011hi, ir011lo, r2, c);
+            (r3, _) = fa::wadd(0u64, ir102hi, r3, c);
+
+            (r2, c) = fa::wadd(ir102lo, ir100hi, r2, false);
+            (r3, _) = fa::wadd(ir103hi, ir103lo, r3, c);
+
+            (r2, c) = fa::wadd(ir101hi, ir101lo, r2, false);
+            (r3, _) = fa::wadd(0u64, m2hi, r3, c);
+
+            (r2, c) = fa::wadd(m2lo, m0hi, r2, false);
+            (r3, _) = fa::wadd(m3hi, m3lo, r3, c);
+
+            (r2, c) = fa::wadd(m1hi, m1lo, r2, false);
+            (r3, _) = fa::wadd(0u64, 0u64, r3, c);
+
+            // return
+            (a.0).0 = [r2 as u64, (r2 >> 64) as u64, r3 as u64, (r3 >> 64) as u64];
         });
     } else if can_use_no_carry_mul_opt {
         // This modular multiplication algorithm uses Montgomery

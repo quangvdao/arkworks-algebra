@@ -6,14 +6,12 @@
     rust_2021_compatibility
 )]
 #![forbid(unsafe_code)]
-
 use num_bigint::BigUint;
 use proc_macro::TokenStream;
 use syn::{Expr, ExprLit, Item, ItemFn, Lit, Meta};
 
 mod montgomery;
 mod unroll;
-
 pub(crate) mod utils;
 
 #[proc_macro]
