@@ -86,6 +86,7 @@ pub fn mont_config_helper(
         limbs,
         &modulus_limbs,
         modulus_has_spare_bit,
+        yd_opt,
     );
     let sum_of_products = sum_of_products_impl(limbs, &modulus_limbs);
 
