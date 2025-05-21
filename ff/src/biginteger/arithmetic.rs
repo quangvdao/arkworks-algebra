@@ -113,9 +113,6 @@ pub const fn mac_with_carry(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
 }
 
 // Some helpers from Yuvals codebase
-// I unrolled this -- as it gives performance optimisation
-// Technically, later there is a way to fully unroll this generically
-// with macros TODO
 #[inline(always)]
 pub fn addv(mut a: [u64; 5], b: [u64; 5]) -> [u64; 5] {
     let mut carry: u64;
@@ -187,7 +184,7 @@ pub fn ysub(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
 
     let tmp = a[3] as i128 - b[3] as i128 + borrow as i128;
     c[3] = tmp as u64;
-    borrow = tmp >> 64;
+    _ = tmp >> 64;
 
     c
 }
@@ -196,6 +193,19 @@ pub fn ysub(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
 pub fn carrying_mul_add(a: u64, b: u64, add: u64, carry: u64) -> (u64, u64) {
     let c: u128 = a as u128 * b as u128 + carry as u128 + add as u128;
     (c as u64, (c >> 64) as u64)
+}
+
+#[inline]
+pub const fn mult(lhs: u64, rhs: u64) -> (u64, u64) {
+    let res = (lhs as u128).wrapping_mul(rhs as u128);
+    ((res >> 64) as u64, res as u64)
+}
+
+#[inline]
+pub const fn wadd(lhs: u64, rhs: u64, acc: u128, c: bool) -> (u128, bool) {
+    let (reslo, c) = (acc as u64).carrying_add(rhs, c);
+    let (reshi, c) = ((acc >> 64) as u64).carrying_add(lhs, c);
+    ((reshi as u128) << 64 | reslo as u128, c)
 }
 
 /// Compute the NAF (non-adjacent form) of num
