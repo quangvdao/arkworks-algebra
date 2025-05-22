@@ -5,5 +5,6 @@ use ark_ff::fields::{Fp256, MontBackend, MontConfig};
 #[generator = "5"]
 #[small_subgroup_base = "3"]
 #[small_subgroup_power = "2"]
+#[yd_opt = "true"]
 pub struct FrConfig;
 pub type Fr = Fp256<MontBackend<FrConfig, 4>>;
