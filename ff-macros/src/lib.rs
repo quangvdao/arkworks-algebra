@@ -5,6 +5,7 @@
     rust_2018_idioms,
     rust_2021_compatibility
 )]
+#![feature(bigint_helper_methods)]
 #![forbid(unsafe_code)]
 use num_bigint::BigUint;
 use proc_macro::TokenStream;
