@@ -144,7 +144,9 @@ pub(super) fn square_in_place_impl(
             (r3, _) = fa::wadd(0u64, 0u64, r3, c);
 
             // return
-            a.0.0 = [r2 as u64, (r2 >> 64) as u64, r3 as u64, (r3 >> 64) as u64]
+            a.0.0 = [r2 as u64, (r2 >> 64) as u64, r3 as u64, (r3 >> 64) as u64];
+            __subtract_modulus(a);
+
         });
         body
     } else {

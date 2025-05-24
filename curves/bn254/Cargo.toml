@@ -32,7 +32,6 @@ r1cs = [ "ark-r1cs-std" ]
 curve = [ "scalar_field" ]
 scalar_field = []
 asm = [ "ark-ff/asm" ]
-
 [[bench]]
 name = "bn254"
 path = "benches/bn254.rs"
