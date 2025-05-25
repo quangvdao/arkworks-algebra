@@ -27,149 +27,14 @@ pub(super) fn mul_assign_impl(
         && modulus_3 == U64_P[3]
     {
         body.extend(quote! {
-        //let (c00hi, c00lo) = fa::mult(a.0.0[0], b.0.0[0]);
-        //let (c01hi, c01lo) = fa::mult(a.0.0[0], b.0.0[1]);
-        //let (c02hi, c02lo) = fa::mult(a.0.0[0], b.0.0[2]);
-        //let (c03hi, c03lo) = fa::mult(a.0.0[0], b.0.0[3]);
-        //let (c10hi, c10lo) = fa::mult(a.0.0[1], b.0.0[0]);
-        //let (c11hi, c11lo) = fa::mult(a.0.0[1], b.0.0[1]);
-        //let (c12hi, c12lo) = fa::mult(a.0.0[1], b.0.0[2]);
-        //let (c13hi, c13lo) = fa::mult(a.0.0[1], b.0.0[3]);
-        //let (c20hi, c20lo) = fa::mult(a.0.0[2], b.0.0[0]);
-        //let (c21hi, c21lo) = fa::mult(a.0.0[2], b.0.0[1]);
-        //let (c22hi, c22lo) = fa::mult(a.0.0[2], b.0.0[2]);
-        //let (c23hi, c23lo) = fa::mult(a.0.0[2], b.0.0[3]);
-        //let (c30hi, c30lo) = fa::mult(a.0.0[3], b.0.0[0]);
-        //let (c31hi, c31lo) = fa::mult(a.0.0[3], b.0.0[1]);
-        //let (c32hi, c32lo) = fa::mult(a.0.0[3], b.0.0[2]);
-        //let (c33hi, c33lo) = fa::mult(a.0.0[3], b.0.0[3]);
-        //
-        //let mut c: bool;
-        //let mut r00 = c00lo;
-        //let mut r01 = 0u64;
-        //let mut r10 = 0u64;
-        //let mut r11 = 0u64;
-        //let mut r20 = 0u64;
-        //let mut r21 = 0u64;
-        //let mut r30 = 0u64;
-        //let mut r31 = 0u64;
-        //
-        //let m = (Self::INV).wrapping_mul(r00);
-        //let (m00hi, m00lo) = fa::mult(m, #modulus_0);
-        //let (m01hi, m01lo) = fa::mult(m, #modulus_1);
-        //let (m02hi, m02lo) = fa::mult(m, #modulus_2);
-        //let (m03hi, m03lo) = fa::mult(m, #modulus_3);
-        //
-        //let (_, c) = r00.carrying_add(m00lo, false);
-        //let (r01, _) = r01.carrying_add(c00hi, c); // carry is rare
-        //
-        //let (r01, c) = r01.carrying_add(c01lo, false);
-        //let (r10, _) = r10.carrying_add(c11lo, c); // carry is rare
-        //
-        //let (r01, c) = r01.carrying_add(c10lo, false);
-        //let (r10, c) = r10.carrying_add(c01hi, c);
-        //let (r11, _) = r11.carrying_add(c11hi, c); // carry is rare
-        //
-        //let (r01, c) = r01.carrying_add(m00hi, false);
-        //let (r10, c) = r10.carrying_add(c10hi, c);
-        //let (r11, c) = r11.carrying_add(c12lo, c);
-        //let (r20, _) = r20.carrying_add(c12hi, c); // carry is rare
-        //
-        //let (r01, c) = r01.carrying_add(m01lo, false);
-        //let (r10, c) = r10.carrying_add(c02lo, c);
-        //let (r11, c) = r11.carrying_add(c21lo, c);
-        //let (r20, c) = r20.carrying_add(c21hi, c);
-        //let (r21, _) = r21.carrying_add(c13hi, c); // carry is rare
-        //
-        //let m = (Self::INV).wrapping_mul(r01);
-        //let (m10hi, m10lo) = fa::mult(m, #modulus_0);
-        //let (m11hi, m11lo) = fa::mult(m, #modulus_1);
-        //let (m12hi, m12lo) = fa::mult(m, #modulus_2);
-        //let (m13hi, m13lo) = fa::mult(m, #modulus_3);
-        //
-        //let (_, c) = r01.carrying_add(m10lo, false);
-        //let (r10, c) = r10.carrying_add(c20lo, c);
-        //let (r11, c) = r11.carrying_add(c02hi, c);
-        //let (r20, c) = r20.carrying_add(c13lo, c);
-        //let (r21, c) = r21.carrying_add(c31hi, c);
-        //let (r30, _) = r30.carrying_add(c23hi, c); // carry is rare
-        //
-        //let (r10, c) = r10.carrying_add(m02lo, false);
-        //let (r11, c) = r11.carrying_add(c20hi, c);
-        //let (r20, c) = r20.carrying_add(c31lo, c);
-        //let (r21, c) = r21.carrying_add(c23lo, c);
-        //let (r30, c) = r30.carrying_add(c32hi, c);
-        //let (r31, _) = r31.carrying_add(c33hi, c);
-        //
-        //let (r10, c) = r10.carrying_add(m01hi, false);
-        //let (r11, c) = r11.carrying_add(c03lo, c);
-        //let (r20, c) = r20.carrying_add(c03hi, c);
-        //let (r21, c) = r21.carrying_add(c32lo, c);
-        //let (r30, c) = r30.carrying_add(c33lo, c);
-        //let (r31, _) = r31.carrying_add(0u64 , c);
-        //
-        //let (r10, c) = r10.carrying_add(m10hi, false);
-        //let (r11, c) = r11.carrying_add(c30lo, c);
-        //let (r20, c) = r20.carrying_add(c30hi, c);
-        //let (r21, c) = r21.carrying_add(c22hi, c);
-        //let (r30, _) = r30.carrying_add(0u64 , c);
-        //
-        //let (r10, c) = r10.carrying_add(m11lo, false);
-        //let (r11, c) = r11.carrying_add(m02hi, c);
-        //let (r20, c) = r20.carrying_add(c22lo, c);
-        //let (r21, c) = r21.carrying_add(m13hi, c);
-        //let (r30, _) = r30.carrying_add(0u64 , c);
-        //
-        //let m = (Self::INV).wrapping_mul(r10);
-        //let (m20hi, m20lo) = fa::mult(m, #modulus_0);
-        //let (m21hi, m21lo) = fa::mult(m, #modulus_1);
-        //let (m22hi, m22lo) = fa::mult(m, #modulus_2);
-        //let (m23hi, m23lo) = fa::mult(m, #modulus_3);
-        //
-        //let (_, c) = r10.carrying_add(m20lo, false);
-        //let (r11, c) = r11.carrying_add(m03lo, c);
-        //let (r20, c) = r20.carrying_add(m03hi, c);
-        //let (r21, c) = r21.carrying_add(m22hi, c);
-        //let (r30, c) = r30.carrying_add(m23hi, c);
-        //let (r31, _) = r31.carrying_add(0u64 , c);
-        //
-        //let (r11, c) = r11.carrying_add(m12lo, false);
-        //let (r20, c) = r20.carrying_add(m12hi, c);
-        //let (r21, c) = r21.carrying_add(m23lo, c);
-        //let (r30, _) = r30.carrying_add(0u64 , c);
-        //
-        //let (r11, c) = r11.carrying_add(m11hi, false);
-        //let (r20, c) = r20.carrying_add(m13lo, c);
-        //let (r21, _) = r21.carrying_add(0u64 , c);
-        //
-        //let (r11, c) = r11.carrying_add(m20hi, false);
-        //let (r20, c) = r20.carrying_add(m22lo, c);
-        //let (r21, _) = r21.carrying_add(0u64 , c);
-        //
-        //let (r11, c) = r11.carrying_add(m21lo, false);
-        //let (r20, c) = r20.carrying_add(m21hi, c);
-        //let (r21, _) = r21.carrying_add(0u64 , c);
-        //
-        //let m = (Self::INV).wrapping_mul(r11);
-        //let (m30hi, m30lo) = fa::mult(m, #modulus_0);
-        //let (m31hi, m31lo) = fa::mult(m, #modulus_1);
-        //let (m32hi, m32lo) = fa::mult(m, #modulus_2);
-        //let (m33hi, m33lo) = fa::mult(m, #modulus_3);
-        //
-        //let (_, c) = r11.carrying_add(m30lo, false);
-        //let (r20, c) = r20.carrying_add(m30hi, c);
-        //let (r21, c) = r21.carrying_add(m32lo, c);
-        //let (r30, c) = r30.carrying_add(m32hi, c);
-        //let (r31, c) = r31.carrying_add(m33hi, c);
-        //let (r20, c) = r20.carrying_add(m31lo, false);
-        //let (r21, c) = r21.carrying_add(m31hi, c);
-        //let (r30, c) = r30.carrying_add(m33lo, c);
-        //let (r31, _) = r31.carrying_add(0u64 , c);
-        //a.0.0 = [r20, r21, r30, r31];
-        //
-
-        //--------------------------------------------YPT-----------------------------
-        //
+        //-------------------------------------------------------------------------
+        // Yuval's Ingoyama implementation using variables, instead of continous
+        // memory. This implmentation is based on 
+        // https://github.com/ingonyama-zk/ingo_skyscraper/blob/main/src/mul_logjumps_unr_2.rs
+        // Another equivalent way of writing this code is based on 
+        // https://github.com/worldfnd/ProveKit/blob/dd8134ec3f2ad4991caa87653254ee64daf2d441/block-multiplier/src/lib.rs#L121
+        // But we found that using the world coin version resulted in slower run times.
+        // A possible reasoning was given here: https://randomwalks.xyz/posts/mont_mult/
         //============================================================================
         let (c00hi, c00lo) = fa::mult(a.0.0[0], b.0.0[0]);
         let (c01hi, c01lo) = fa::mult(a.0.0[0], b.0.0[1]);
@@ -275,13 +140,16 @@ pub(super) fn mul_assign_impl(
 
         (r2, c) = fa::wadd(m1hi, m1lo, r2, false);
         (r3, _) = fa::wadd(0u64, 0u64, r3, c);
-
-        // return
         (a.0).0 = [r2 as u64, (r2 >> 64) as u64, r3 as u64, (r3 >> 64) as u64];
         //---------------------------------Y-opt----------------------------------
-        
+        // In the original code there was no reduction -- as this was just 
+        // benchmarking code. In arkworks, we expect the final answer of 
+        // Mont mult to be less than the modulus. 
+        // To understand why we need 2 instead of 1 subtract modulus
+        // see https://randomwalks.xyz/posts/why-jolt-panicked/
         __subtract_modulus(a);
         __subtract_modulus(a);
+        //-------------------------------------------------------------------
         });
     } else if can_use_no_carry_mul_opt {
         // This modular multiplication algorithm uses Montgomery
