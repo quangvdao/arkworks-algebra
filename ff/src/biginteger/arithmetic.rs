@@ -152,6 +152,96 @@ pub fn mac_with_carry(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
 
 // Some helpers from Yuvals codebase
 #[inline(always)]
+fn ge_p(a: &[u64; 4]) -> bool {
+    if a[3] > 0x30644e72e131a029 {
+        true
+    } else if a[3] < 0x30644e72e131a029 {
+        false
+    } else if a[2] > 0xb85045b68181585d {
+        true
+    } else if a[2] < 0xb85045b68181585d {
+        false
+    } else if a[1] > 0x2833e84879b97091 {
+        true
+    } else if a[1] < 0x2833e84879b97091 {
+        false
+    } else {
+        a[0] >= 0x43e1f593f0000001
+    }
+}
+
+#[inline(always)]
+fn ge_2p(a: &[u64; 4]) -> bool {
+    if a[3] > 0x60c89ce5c2634053 {
+        true
+    } else if a[3] < 0x60c89ce5c2634053 {
+        false
+    } else if a[2] > 0x70a08b6d0302b0ba {
+        true
+    } else if a[2] < 0x70a08b6d0302b0ba {
+        false
+    } else if a[1] > 0x5067d090f372e122 {
+        true
+    } else if a[1] < 0x5067d090f372e122 {
+        false
+    } else {
+        a[0] >= 0x87c3eb27e0000002
+    }
+}
+
+#[inline(always)]
+fn sub_two_p(a: &mut [u64; 4]) {
+    const TWO_P: [u64; 4] = [
+        0x87c3eb27e0000002,
+        0x5067d090f372e122,
+        0x70a08b6d0302b0ba,
+        0x60c89ce5c2634053,
+    ];
+
+    let (r0, borrow0) = a[0].overflowing_sub(TWO_P[0]);
+    let (r1, borrow1) = a[1].overflowing_sub(TWO_P[1] + (borrow0 as u64));
+    let (r2, borrow2) = a[2].overflowing_sub(TWO_P[2] + (borrow1 as u64));
+    let (r3, _borrow3) = a[3].overflowing_sub(TWO_P[3] + (borrow2 as u64));
+
+    a[0] = r0;
+    a[1] = r1;
+    a[2] = r2;
+    a[3] = r3;
+}
+#[inline(always)]
+fn sub_one_p(a: &mut [u64; 4]) {
+    const P: [u64; 4] = [
+        0x43e1f593f0000001,
+        0x2833e84879b97091,
+        0xb85045b68181585d,
+        0x30644e72e131a029,
+    ];
+
+    let (r0, borrow0) = a[0].overflowing_sub(P[0]);
+    let (r1, borrow1) = a[1].overflowing_sub(P[1] + (borrow0 as u64));
+    let (r2, borrow2) = a[2].overflowing_sub(P[2] + (borrow1 as u64));
+    let (r3, _borrow3) = a[3].overflowing_sub(P[3] + (borrow2 as u64));
+
+    a[0] = r0;
+    a[1] = r1;
+    a[2] = r2;
+    a[3] = r3;
+}
+#[inline(always)]
+pub fn reduce_twice_if_needed(a: &mut [u64; 4]) {
+    if ge_2p(a) {
+        sub_two_p(a);
+    } else if ge_p(a) {
+        sub_one_p(a);
+    }
+}
+#[inline(always)]
+pub fn reduce_once_if_needed(a: &mut [u64; 4]) {
+    if ge_p(a) {
+        sub_one_p(a);
+    }
+}
+#[inline(always)]
 pub fn addv(mut a: [u64; 5], b: [u64; 5]) -> [u64; 5] {
     let mut carry: u64;
 
@@ -181,50 +271,6 @@ pub fn addv(mut a: [u64; 5], b: [u64; 5]) -> [u64; 5] {
     // final carry is discarded
 
     a
-}
-
-#[inline(always)]
-pub fn reduce_ct(a: [u64; 4], two_p: [u64; 4]) -> [u64; 4] {
-    let b = [[0_u64; 4], two_p];
-    let msb = (a[3] >> 63) & 1;
-    ysub(a, b[msb as usize])
-}
-// This is just nameed as ysub for now : it should be sub
-//#[inline(always)]
-//pub fn ysub<const N: usize>(a: [u64; N], b: [u64; N]) -> [u64; N] {
-//    let mut borrow: i128 = 0;
-//    let mut c = [0; N];
-//    for i in 0..N {
-//        let tmp = a[i] as i128 - b[i] as i128 + borrow as i128;
-//        c[i] = tmp as u64;
-//        borrow = tmp >> 64
-//    }
-//    c
-//}
-
-// Once again unrolled to potentially speed things
-#[inline(always)]
-pub fn ysub(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
-    let mut borrow: i128 = 0;
-    let mut c = [0; 4];
-
-    let tmp = a[0] as i128 - b[0] as i128 + borrow as i128;
-    c[0] = tmp as u64;
-    borrow = tmp >> 64;
-
-    let tmp = a[1] as i128 - b[1] as i128 + borrow as i128;
-    c[1] = tmp as u64;
-    borrow = tmp >> 64;
-
-    let tmp = a[2] as i128 - b[2] as i128 + borrow as i128;
-    c[2] = tmp as u64;
-    borrow = tmp >> 64;
-
-    let tmp = a[3] as i128 - b[3] as i128 + borrow as i128;
-    c[3] = tmp as u64;
-    _ = tmp >> 64;
-
-    c
 }
 
 #[inline(always)]
