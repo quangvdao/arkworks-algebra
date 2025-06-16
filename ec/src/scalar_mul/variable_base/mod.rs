@@ -119,18 +119,32 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     };
 
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
-    let digits_count = (num_bits + c - 1) / c;
-    #[cfg(feature = "parallel")]
-    let scalar_digits = scalars
-        .into_par_iter()
-        .flat_map_iter(|s| make_digits(s, c, num_bits))
-        .collect::<Vec<_>>();
-    #[cfg(not(feature = "parallel"))]
-    let scalar_digits = scalars
-        .iter()
-        .flat_map(|s| make_digits(s, c, num_bits))
-        .collect::<Vec<_>>();
+    let digits_count = (num_bits + c - 1) / c; // This is the number of slices
+
+    // This did not make much time difference
+    let scalar_digits = {
+        #[cfg(feature = "parallel")]
+        {
+            //println!("Using PARALLEL scalar_digits path");
+            scalars
+                .into_par_iter()
+                .flat_map_iter(|s| make_digits(s, c, num_bits))
+                .collect::<Vec<_>>()
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            //println!("Using SERIAL scalar_digits path");
+            scalars
+                .iter()
+                .flat_map(|s| make_digits(s, c, num_bits))
+                .collect::<Vec<_>>()
+        }
+    };
+
     let zero = V::zero();
+    // THIS IS THE MAIN SPEEDUP!!!! Parallel here helps
+    // Replacing the linear one with this kills me
+    //let window_sums: Vec<_> = (0..digits_count).into_iter()
     let window_sums: Vec<_> = ark_std::cfg_into_iter!(0..digits_count)
         .map(|i| {
             let mut buckets = vec![zero; 1 << c];
@@ -145,6 +159,9 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
                 }
             }
 
+            // This is saying that
+            // [B1, B2, B3] is the bucket
+            // then the answer res is B1 + 2B2 + 3B3
             let mut running_sum = V::zero();
             let mut res = V::zero();
             buckets.into_iter().rev().for_each(|b| {
@@ -158,6 +175,8 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     // We store the sum for the lowest window.
     let lowest = *window_sums.first().unwrap();
 
+    // P = sum 1..num_digits radix^j W_j : W_j = Window_sums
+    // Cmes from above collect
     // We're traversing windows from high to low.
     lowest
         + &window_sums[1..]
@@ -205,6 +224,11 @@ fn msm_bigint<V: VariableBaseMSM>(
             // This clone is cheap, because the iterator contains just a
             // pointer and an index into the original vectors.
             scalars_and_bases_iter.clone().for_each(|(&scalar, base)| {
+                // Note this only applies for scalars that are overall one.
+                // In this if block scalar is not the cropped limb.
+                // It's the actual full scalar
+                // scalar will never be one for w_start != 0
+                // so the second if statement is not needed
                 if scalar == one {
                     // We only process unit scalars once in the first window.
                     if w_start == 0 {
@@ -213,10 +237,11 @@ fn msm_bigint<V: VariableBaseMSM>(
                 } else {
                     let mut scalar = scalar;
 
+                    // The following two lines gets c bits starting from
+                    // w_start.
                     // We right-shift by w_start, thus getting rid of the
                     // lower bits.
                     scalar >>= w_start as u32;
-
                     // We mod the remaining bits by 2^{window size}, thus taking `c` bits.
                     let scalar = scalar.as_ref()[0] % (1 << c);
 
