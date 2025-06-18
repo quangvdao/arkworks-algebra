@@ -39,8 +39,11 @@ pub trait VariableBaseMSM: ScalarMul {
         let bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
-        Self::msm_bigint(bases, &bigints)
+        Self::msm_bigint(bases, bigints.as_slice())
     }
+    // Ari Change &bigints --> bigints.as_slice()
+    // msm_bigint wants &[T] but we're passing it &Vec<T>
+    // As slice helps convert vec to a &[T]
 
     /// Performs multi-scalar multiplication.
     ///
@@ -131,6 +134,8 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
                 .flat_map_iter(|s| make_digits(s, c, num_bits))
                 .collect::<Vec<_>>()
         }
+        // parallel is not turned on by default here,
+        // but when we call it we always have it on.
         #[cfg(not(feature = "parallel"))]
         {
             //println!("Using SERIAL scalar_digits path");
@@ -162,6 +167,7 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
             // This is saying that
             // [B1, B2, B3] is the bucket
             // then the answer res is B1 + 2B2 + 3B3
+            // TODO (ARI): Can this be sped up wit batching?
             let mut running_sum = V::zero();
             let mut res = V::zero();
             buckets.into_iter().rev().for_each(|b| {
