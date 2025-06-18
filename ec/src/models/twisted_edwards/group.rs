@@ -489,6 +489,8 @@ impl<P: TECurveConfig> ScalarMul for Projective<P> {
 }
 
 impl<P: TECurveConfig> VariableBaseMSM for Projective<P> {
+    type Bucket = Self;
+    const ZERO_BUCKET: Self = Self::ZERO;
     fn msm(bases: &[Self::MulBase], bigints: &[Self::ScalarField]) -> Result<Self, usize> {
         P::msm(bases, bigints)
     }
