@@ -11,9 +11,6 @@ use rayon::prelude::*;
 use crate::decomp_4d::decompose_scalar_4d;
 use crate::frobenius::frobenius_psi_power_projective;
 
-// ============================================================================
-// Method 1: Online Version - No precomputation
-// ============================================================================
 
 /// Online 4D GLV scalar multiplication
 pub fn glv_four_scalar_mul_online(scalar: Fr, points: &[G2Projective]) -> Vec<G2Projective> {
@@ -64,10 +61,6 @@ pub(crate) fn shamir_glv_mul_4d(
     
     result
 }
-
-// ============================================================================
-// Method 2: Precomputed Full Version  
-// ============================================================================
 
 /// Precomputed data for 4D GLV with Shamir table
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
@@ -179,9 +172,6 @@ pub(crate) fn shamir_glv_mul_4d_precomputed(
     result
 }
 
-// ============================================================================
-// Method 3: Signed Table Version (2-bit windowed)
-// ============================================================================
 
 /// Precomputed data for 2-bit windowed signed method
 pub struct Windowed2Signed4Data {
@@ -335,10 +325,6 @@ fn glv_four_scalar_mul_windowed2_signed_single(
     
     result
 }
-
-// ============================================================================
-// Additional utilities for decomposed scalars
-// ============================================================================
 
 /// Scalar multiplication using precomputed data and decomposed scalar
 pub fn glv_four_scalar_mul_decomposed(

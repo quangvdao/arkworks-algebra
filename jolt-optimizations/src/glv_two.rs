@@ -10,9 +10,6 @@ use rayon::prelude::*;
 
 use crate::decomp_2d::{decompose_scalar_2d, glv_endomorphism};
 
-// ============================================================================
-// Method 1: Online Version - No precomputation
-// ============================================================================
 
 /// Online 2D GLV scalar multiplication
 pub fn glv_two_scalar_mul_online(scalar: Fr, points: &[G1Projective]) -> Vec<G1Projective> {
@@ -61,9 +58,6 @@ pub(crate) fn shamir_glv_mul_2d(
     result
 }
 
-// ============================================================================
-// Method 2: Precomputed Full Version
-// ============================================================================
 
 /// Precomputed data for 2D GLV with Shamir table
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
@@ -172,10 +166,6 @@ pub(crate) fn shamir_glv_mul_2d_precomputed(
 
     result
 }
-
-// ============================================================================
-// Method 3: Signed Table Version (2-bit windowed)
-// ============================================================================
 
 /// Precomputed data for 2-bit windowed signed method
 pub struct Windowed2Signed2Data {
@@ -324,10 +314,6 @@ fn glv_two_scalar_mul_windowed2_signed_single(
     result
 }
 
-// ============================================================================
-// Additional utilities for decomposed scalars
-// ============================================================================
-
 /// Scalar multiplication using precomputed data and decomposed scalar
 pub fn glv_two_scalar_mul_decomposed(
     data: &PrecomputedShamir2Data,
@@ -402,6 +388,7 @@ impl FixedBasePrecomputedG1 {
 }
 
 /// Fixed-base vector MSM: compute base * scalars[i] for all i
+/// Used in Dory for the g2_scaling by g_fin in eval_vmv_re
 pub fn fixed_base_vector_msm_g1(base: &G1Projective, scalars: &[Fr]) -> Vec<G1Projective> {
     let precomputed = FixedBasePrecomputedG1::new(base);
     precomputed.mul_scalars(scalars)

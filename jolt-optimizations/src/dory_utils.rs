@@ -1,7 +1,4 @@
 //! Dory-specific optimized utilities for vector scalar multiplication
-//!
-//! This module provides specialized interfaces for common Dory operations,
-//! particularly vector scalar multiplication with fixed scalars and generators.
 
 use ark_bn254::{Fr, G2Projective};
 use ark_ff::PrimeField;
@@ -39,10 +36,6 @@ pub struct VectorScalarMulData {
 
 impl VectorScalarMulData {
     /// Create precomputed data for vector scalar multiplication
-    ///
-    /// # Arguments
-    /// * `generators` - Fixed G2 generators that will be multiplied
-    /// * `scalar` - Fixed scalar that will be used for all multiplications
     pub fn new(generators: &[G2Projective], scalar: Fr) -> Self {
         // Decompose the scalar once
         let (scalar_coeffs, scalar_signs) = decompose_scalar(scalar);
@@ -64,16 +57,6 @@ impl VectorScalarMulData {
 }
 
 /// Perform vector scalar multiplication and addition using precomputed data
-///
-/// Computes `v[i] = v[i] + scalar * generators[i]` for all i, where scalar and generators
-/// are fixed and precomputed in `data`.
-///
-/// # Arguments
-/// * `v` - Mutable reference to vector to update (values will be added to)
-/// * `data` - Precomputed data containing decomposed scalar and generator tables
-///
-/// # Panics
-/// * If `v.len() != data.num_generators()`
 pub fn vector_scalar_mul_add_precomputed(v: &mut [G2Projective], data: &VectorScalarMulData) {
     assert_eq!(
         v.len(),
@@ -95,17 +78,6 @@ pub fn vector_scalar_mul_add_precomputed(v: &mut [G2Projective], data: &VectorSc
 }
 
 /// Perform vector scalar multiplication and addition online (without precomputation)
-///
-/// Computes `v[i] = v[i] + scalar * generators[i]` for all i.
-/// This version decomposes the scalar once but doesn't use precomputed tables.
-///
-/// # Arguments
-/// * `v` - Mutable reference to vector to update (values will be added to)
-/// * `generators` - Fixed G2 generators to multiply
-/// * `scalar` - Fixed scalar to multiply with each generator
-///
-/// # Panics
-/// * If `v.len() != generators.len()`
 pub fn vector_scalar_mul_add_online(
     v: &mut [G2Projective],
     generators: &[G2Projective],
@@ -145,14 +117,6 @@ pub fn vector_scalar_mul_add_online(
 }
 
 /// Convenience function to create and use precomputed data in one call
-///
-/// This is equivalent to creating `VectorScalarMulData` and then calling
-/// `vector_scalar_mul_add_precomputed`, but more convenient for one-time use.
-///
-/// # Arguments
-/// * `v` - Mutable reference to vector to update (values will be added to)
-/// * `generators` - Fixed G2 generators to multiply
-/// * `scalar` - Fixed scalar to multiply with each generator
 pub fn vector_scalar_mul_add(v: &mut [G2Projective], generators: &[G2Projective], scalar: Fr) {
     let data = VectorScalarMulData::new(generators, scalar);
     vector_scalar_mul_add_precomputed(v, &data);
@@ -170,9 +134,6 @@ pub struct VectorScalarMulVData {
 
 impl VectorScalarMulVData {
     /// Create precomputed scalar decomposition for vector element scaling
-    ///
-    /// # Arguments
-    /// * `scalar` - Fixed scalar that will be used to scale vector elements
     pub fn new(scalar: Fr) -> Self {
         let (scalar_coeffs, scalar_signs) = decompose_scalar(scalar);
 
@@ -184,17 +145,6 @@ impl VectorScalarMulVData {
 }
 
 /// Perform vector scalar multiplication with vector scaling using precomputed data
-///
-/// Computes `v[i] = scalar * v[i] + generators[i]` for all i, where scalar decomposition
-/// is precomputed in `data`.
-///
-/// # Arguments
-/// * `v` - Mutable reference to vector to update (will be scaled and then added to)
-/// * `generators` - Fixed G2 generators to add to scaled vector elements
-/// * `data` - Precomputed data containing decomposed scalar
-///
-/// # Panics
-/// * If `v.len() != generators.len()`
 pub fn vector_scalar_mul_v_add_g_precomputed(
     v: &mut [G2Projective],
     generators: &[G2Projective],
@@ -231,17 +181,6 @@ pub fn vector_scalar_mul_v_add_g_precomputed(
 }
 
 /// Perform vector scalar multiplication with vector scaling online (without precomputation)
-///
-/// Computes `v[i] = scalar * v[i] + generators[i]` for all i.
-/// This version decomposes the scalar once but doesn't use precomputed tables.
-///
-/// # Arguments
-/// * `v` - Mutable reference to vector to update (will be scaled and then added to)
-/// * `generators` - Fixed G2 generators to add to scaled vector elements  
-/// * `scalar` - Fixed scalar to multiply with each vector element
-///
-/// # Panics
-/// * If `v.len() != generators.len()`
 pub fn vector_scalar_mul_v_add_g_online(
     v: &mut [G2Projective],
     generators: &[G2Projective],
