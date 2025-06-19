@@ -126,14 +126,6 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
     ) -> PairingOutput<Self> {
         Self::multi_pairing([p], [q])
     }
-
-    /// Computes a "product" of pairings using prepared element references.
-    fn multi_pairing_ref(
-        a: impl IntoIterator<Item = impl AsRef<Self::G1Prepared>>,
-        b: impl IntoIterator<Item = impl AsRef<Self::G2Prepared>>,
-    ) -> PairingOutput<Self> {
-        Self::final_exponentiation(Self::multi_miller_loop_ref(a, b)).unwrap()
-    }
 }
 
 /// Represents the target group of a pairing. This struct is a
