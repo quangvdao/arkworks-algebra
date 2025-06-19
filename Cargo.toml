@@ -147,6 +147,7 @@ ark-poly = { version = "0.5.0", path = "./poly", default-features = false }
 ark-serialize = { version = "0.5.0", path = "./serialize", default-features = false }
 ark-serialize-derive = { version = "0.5.0", path = "./serialize-derive" }
 ark-std = { version = "0.5.0", default-features = false }
+ark-bn254 = { version = "0.5.0"}
 
 ark-algebra-bench-templates = { version = "0.5.0", path = "./bench-templates", default-features = false }
 ark-algebra-test-templates = { version = "0.5.0", path = "./test-templates", default-features = false }
@@ -210,4 +211,3 @@ debug = true
 
 [patch.crates-io]
 ark-bn254 = { path = "./curves/bn254", features = ["curve", "scalar_field"] }
-
