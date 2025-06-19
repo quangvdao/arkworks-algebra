@@ -1,36 +1,36 @@
 [package]
 name = "jolt-optimizations"
-version = "0.1.0"
-edition = "2021"
-authors = ["arkworks contributors"]
-description = "Optimized BN254 G2 scalar multiplication using 4D GLV decomposition"
-license = "MIT/Apache-2.0"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+categories.workspace = true
+include.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+metadata.docs.rs.workspace = true
+description = "Optimized BN254 G1/G2 scalar multiplication primitives using 2D/4D GLV decomposition"
 
 [dependencies]
-# Use published arkworks versions for stability
-
 ark-bn254 = "0.5.0"
-ark-ec = { version = "0.5.0", default-features = false, features = [
-    "parallel",
-] }
-ark-ff = { version = "0.5.0", default-features = false, features = [
-    "parallel",
-] }
-ark-serialize = { version = "0.5.0", default-features = false, features = [
-    "derive",
-    "parallel",
-] }
-ark-std = "0.4"
-num-bigint = "0.4"
+ark-ec.workspace = true
+ark-ff.workspace = true
+ark-serialize.workspace = true
+ark-std.workspace = true
+num-bigint.workspace = true
 num-rational = "0.4.2"
-num-integer = "0.1.46"
-num-traits = "0.2"
-rayon = "1.8"
-
-# Patches should be in workspace root Cargo.toml
+num-integer.workspace = true
+num-traits.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion.workspace = true
+
+[features]
+default = []
+std = ["ark-std/std", "ark-ff/std", "ark-ec/std", "ark-serialize/std"]
+parallel = ["std", "ark-std/parallel", "ark-ff/parallel", "ark-ec/parallel", "ark-serialize/parallel"]
 
 [[bench]]
 name = "scalar_multiplication"

@@ -5,6 +5,7 @@
 
 use ark_bn254::Fq2;
 use ark_ff::MontFp;
+use ark_bn254::Fr;
 
 // Include the generated power of 2 decompositions table
 include!(concat!(env!("OUT_DIR"), "/power_of_2_decompositions.rs"));
@@ -64,9 +65,9 @@ pub fn get_frobenius_coefficients() -> FrobeniusCoefficients {
 }
 
 /// Get the Frobenius eigenvalue λ_ψ for BN254
-pub fn get_bn254_frobenius_eigenvalue() -> ark_bn254::Fr {
+pub fn get_bn254_frobenius_eigenvalue() -> Fr {
     use ark_ff::PrimeField;
-    ark_bn254::Fr::from_be_bytes_mod_order(&[
+    Fr::from_be_bytes_mod_order(&[
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x6f, 0x4d, 0x82, 0x48, 0xee, 0xb8, 0x59, 0xfb, 0xf8, 0x3e, 0x96, 0x82, 0xe8, 0x7c,
         0xfd, 0x46,
