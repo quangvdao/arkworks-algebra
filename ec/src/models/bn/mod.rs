@@ -27,13 +27,13 @@ pub enum TwistType {
 pub trait BnConfig: 'static + Sized {
     /// The absolute value of the BN curve parameter `X`
     /// (as in `q = 36 X^4 + 36 X^3 + 24 X^2 + 6 X + 1`).
-    const X: &[u64];
+    const X: &'static [u64];
 
     /// Whether or not `X` is negative.
     const X_IS_NEGATIVE: bool;
 
     /// The absolute value of `6X + 2`.
-    const ATE_LOOP_COUNT: &[i8];
+    const ATE_LOOP_COUNT: &'static [i8];
 
     const TWIST_TYPE: TwistType;
     const TWIST_MUL_BY_Q_X: Fp2<Self::Fp2Config>;
@@ -97,85 +97,6 @@ pub trait BnConfig: 'static + Sized {
 
         for (p, coeffs) in &mut pairs {
             Bn::<Self>::ell(&mut f, &coeffs.next().unwrap(), &p.0);
-        }
-
-        MillerLoopOutput(f)
-    }
-
-    /// Optimized version that works directly with prepared references without cloning
-    fn multi_miller_loop_ref<'a>(
-        a: impl IntoIterator<Item = impl AsRef<G1Prepared<Self>> + 'a>,
-        b: impl IntoIterator<Item = impl AsRef<G2Prepared<Self>> + 'a>,
-    ) -> MillerLoopOutput<Bn<Self>> {
-        // Collect into owned vectors first to ensure we have stable references
-        let a_refs: Vec<_> = a.into_iter().collect();
-        let b_refs: Vec<_> = b.into_iter().collect();
-
-        #[cfg(feature = "parallel")]
-        let mut pairs: Vec<(&G1Prepared<Self>, &G2Prepared<Self>, usize)> = {
-            use rayon::prelude::*;
-            a_refs
-                .par_iter()
-                .zip_eq(b_refs.par_iter())
-                .filter_map(|(p, q)| {
-                    let (p_ref, q_ref) = (p.as_ref(), q.as_ref());
-                    match !p_ref.is_zero() && !q_ref.is_zero() {
-                        true => Some((p_ref, q_ref, 0usize)), // 0 is the index into ell_coeffs
-                        false => None,
-                    }
-                })
-                .collect()
-        };
-
-        #[cfg(not(feature = "parallel"))]
-        let mut pairs: Vec<(&G1Prepared<Self>, &G2Prepared<Self>, usize)> = a_refs
-            .iter()
-            .zip_eq(b_refs.iter())
-            .filter_map(|(p, q)| {
-                let (p_ref, q_ref) = (p.as_ref(), q.as_ref());
-                match !p_ref.is_zero() && !q_ref.is_zero() {
-                    true => Some((p_ref, q_ref, 0usize)), // 0 is the index into ell_coeffs
-                    false => None,
-                }
-            })
-            .collect();
-
-        let mut f = cfg_chunks_mut!(pairs, 4)
-            .map(|pairs| {
-                let mut f = <Bn<Self> as Pairing>::TargetField::one();
-                for i in (1..Self::ATE_LOOP_COUNT.len()).rev() {
-                    if i != Self::ATE_LOOP_COUNT.len() - 1 {
-                        f.square_in_place();
-                    }
-
-                    for (p, q, idx) in pairs.iter_mut() {
-                        Bn::<Self>::ell(&mut f, &q.ell_coeffs[*idx], &p.0);
-                        *idx += 1;
-                    }
-
-                    let bit = Self::ATE_LOOP_COUNT[i - 1];
-                    if bit == 1 || bit == -1 {
-                        for (p, q, idx) in pairs.iter_mut() {
-                            Bn::<Self>::ell(&mut f, &q.ell_coeffs[*idx], &p.0);
-                            *idx += 1;
-                        }
-                    }
-                }
-                f
-            })
-            .product::<<Bn<Self> as Pairing>::TargetField>();
-
-        if Self::X_IS_NEGATIVE {
-            f.cyclotomic_inverse_in_place();
-        }
-
-        for (p, q, idx) in &mut pairs {
-            Bn::<Self>::ell(&mut f, &q.ell_coeffs[*idx], &p.0);
-            *idx += 1;
-        }
-
-        for (p, q, idx) in &mut pairs {
-            Bn::<Self>::ell(&mut f, &q.ell_coeffs[*idx], &p.0);
         }
 
         MillerLoopOutput(f)
@@ -304,13 +225,6 @@ impl<P: BnConfig> Pairing for Bn<P> {
         b: impl IntoIterator<Item = impl Into<Self::G2Prepared>>,
     ) -> MillerLoopOutput<Self> {
         P::multi_miller_loop(a, b)
-    }
-
-    fn multi_miller_loop_ref(
-        a: impl IntoIterator<Item = impl AsRef<Self::G1Prepared>>,
-        b: impl IntoIterator<Item = impl AsRef<Self::G2Prepared>>,
-    ) -> MillerLoopOutput<Self> {
-        P::multi_miller_loop_ref(a, b)
     }
 
     fn final_exponentiation(f: MillerLoopOutput<Self>) -> Option<PairingOutput<Self>> {
