@@ -13,6 +13,8 @@ members = [
     "poly",
     "test-curves",
     "test-templates",
+
+    "jolt-optimizations",
 ]
 exclude = ["curves/**"]
 resolver = "2"
