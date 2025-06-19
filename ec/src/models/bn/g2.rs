@@ -185,3 +185,9 @@ impl<'a, P: BnConfig> From<&'a G2Prepared<P>> for G2Prepared<P> {
         other.clone()
     }
 }
+
+impl<P: BnConfig> AsRef<G2Prepared<P>> for G2Prepared<P> {
+    fn as_ref(&self) -> &G2Prepared<P> {
+        self
+    }
+}
