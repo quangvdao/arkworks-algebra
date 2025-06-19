@@ -42,7 +42,7 @@ fn test_glv_two_consistency() {
         let expected_affine = expected.into_affine();
         let online_affine = result_online[i].into_affine();
         let precomputed_affine = result_precomputed[i].into_affine();
-        let windowed2_signed_affine = result_windowed2_signed[i].into_affine();
+        let _windowed2_signed_affine = result_windowed2_signed[i].into_affine();
 
         assert_eq!(
             expected_affine, online_affine,
@@ -86,7 +86,7 @@ fn test_g1_vector_scalar_mul_add() {
 
     // Test precomputed version
     let precomputed_generators = PrecomputedShamir2Data::new(&generators);
-    vector_add_scalar_mul_g1_precomputed(&mut v_precomputed, scalar, &precomputed_generators);
+    vector_add_scalar_mul_g1_precomputed(&mut v_precomputed, scalar, &precomputed_generators.shamir_tables);
 
     // Test windowed2 signed version
     let windowed2_generators = Windowed2Signed2Data::new(&generators);
