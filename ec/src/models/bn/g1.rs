@@ -50,6 +50,12 @@ impl<'a, P: BnConfig> From<&'a G1Prepared<P>> for G1Prepared<P> {
     }
 }
 
+impl<P: BnConfig> AsRef<G1Prepared<P>> for G1Prepared<P> {
+    fn as_ref(&self) -> &G1Prepared<P> {
+        self
+    }
+}
+
 impl<P: BnConfig> Default for G1Prepared<P> {
     fn default() -> Self {
         G1Prepared(G1Affine::<P>::generator())

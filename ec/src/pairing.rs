@@ -96,6 +96,17 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         Self::multi_miller_loop([a], [b])
     }
 
+    /// The default implementation clones the references, but implementations should override
+    /// this to work directly with the references for better performance.
+    fn multi_miller_loop_ref(
+        a: impl IntoIterator<Item = impl AsRef<Self::G1Prepared>>,
+        b: impl IntoIterator<Item = impl AsRef<Self::G2Prepared>>,
+    ) -> MillerLoopOutput<Self> {
+        let a_cloned = a.into_iter().map(|x| x.as_ref().clone()).collect::<Vec<_>>();
+        let b_cloned = b.into_iter().map(|x| x.as_ref().clone()).collect::<Vec<_>>();
+        Self::multi_miller_loop(a_cloned, b_cloned)
+    }
+
     /// Performs final exponentiation of the result of a `Self::multi_miller_loop`.
     #[must_use]
     fn final_exponentiation(mlo: MillerLoopOutput<Self>) -> Option<PairingOutput<Self>>;
@@ -114,6 +125,14 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         q: impl Into<Self::G2Prepared>,
     ) -> PairingOutput<Self> {
         Self::multi_pairing([p], [q])
+    }
+
+    /// Computes a "product" of pairings using prepared element references.
+    fn multi_pairing_ref(
+        a: impl IntoIterator<Item = impl AsRef<Self::G1Prepared>>,
+        b: impl IntoIterator<Item = impl AsRef<Self::G2Prepared>>,
+    ) -> PairingOutput<Self> {
+        Self::final_exponentiation(Self::multi_miller_loop_ref(a, b)).unwrap()
     }
 }
 
