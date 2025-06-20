@@ -4,7 +4,7 @@
 //! using 4-dimensional decomposition combining GLV and Frobenius endomorphisms.
 //!
 //! The main optimization reduces a 256-bit scalar multiplication to four ~66-bit
-//! scalar multiplications, providing significant speedup for MSM operations.
+//! scalar multiplications.
 //! Also provides BN254 G1 equivalents.
 //! Uses Strauss-shamir batched scalar multiplication to maximally take advantage of GLV.
 

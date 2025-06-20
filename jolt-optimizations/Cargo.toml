@@ -51,3 +51,6 @@ harness = false
 [[bench]]
 name = "vector_scalar_mul_add_gamma_g2"
 harness = false
+
+[[example]]
+name = "memory_test"
