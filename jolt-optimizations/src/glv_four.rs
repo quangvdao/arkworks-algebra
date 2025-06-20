@@ -174,11 +174,13 @@ pub(crate) fn shamir_glv_mul_4d_precomputed(
 
 
 /// Precomputed data for 2-bit windowed signed method
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Windowed2Signed4Data {
     pub windowed2_tables: Vec<Windowed2Signed4Table>,
 }
 
 /// 2-bit signed table: stores [±P, ±2P, ±3P] for each base
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Windowed2Signed4Table {
     pub signed_multiples: Vec<G2Projective>, // 4 bases × 6 variants (24 elements)
 }
