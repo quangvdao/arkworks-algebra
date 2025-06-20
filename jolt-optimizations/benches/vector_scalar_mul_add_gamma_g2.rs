@@ -6,10 +6,7 @@ use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, UniformRand};
 use ark_std::test_rng;
 
-use jolt_optimizations::{
-    vector_scalar_mul_add_gamma_g2_online,
-    glv_four_precompute,
-};
+use jolt_optimizations::{glv_four_precompute, vector_scalar_mul_add_gamma_g2_online};
 
 fn bench_vector_scalar_mul_add_gamma_g2(c: &mut Criterion) {
     let mut rng = test_rng();
@@ -45,7 +42,6 @@ fn bench_vector_scalar_mul_add_gamma_g2(c: &mut Criterion) {
             },
         );
 
-
         // Benchmark hypothetical precomputed version with actual precomputation
         // This measures: precompute on v + use precomputed tables
         group.bench_with_input(
@@ -60,16 +56,16 @@ fn bench_vector_scalar_mul_add_gamma_g2(c: &mut Criterion) {
 
                         // Time includes both precomputation and the operation
                         let start = Instant::now();
-                        
+
                         // Precompute tables for v
                         let precomputed_v = glv_four_precompute(&v);
-                        
+
                         // Now compute scalar * v[i] using precomputed tables
                         // We use glv_four_scalar_mul which uses the precomputed data
                         use jolt_optimizations::glv_four_scalar_mul;
                         use rayon::prelude::*;
                         let products = glv_four_scalar_mul(&precomputed_v, *scalar);
-                        
+
                         // Add gamma to get v[i] = scalar * v[i] + gamma[i] in parallel
                         v.par_iter_mut()
                             .zip(products.par_iter())
@@ -77,7 +73,7 @@ fn bench_vector_scalar_mul_add_gamma_g2(c: &mut Criterion) {
                             .for_each(|((vi, &prod), &gamma_i)| {
                                 *vi = prod + gamma_i;
                             });
-                        
+
                         total_time += start.elapsed();
                         black_box(v);
                     }
@@ -108,8 +104,5 @@ fn bench_vector_scalar_mul_add_gamma_g2(c: &mut Criterion) {
     }
 }
 
-criterion_group!(
-    benches,
-    bench_vector_scalar_mul_add_gamma_g2,
-);
+criterion_group!(benches, bench_vector_scalar_mul_add_gamma_g2,);
 criterion_main!(benches);

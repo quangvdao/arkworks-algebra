@@ -19,29 +19,19 @@ pub mod glv_two;
 
 mod glv_four;
 pub use glv_four::{
-    glv_four_precompute, glv_four_precompute_windowed2_signed,
-    glv_four_scalar_mul, glv_four_scalar_mul_decomposed, glv_four_scalar_mul_online,
-    glv_four_scalar_mul_windowed2_signed,
-    PrecomputedShamir4Data, PrecomputedShamir4Table,
+    glv_four_precompute, glv_four_precompute_windowed2_signed, glv_four_scalar_mul,
+    glv_four_scalar_mul_decomposed, glv_four_scalar_mul_online,
+    glv_four_scalar_mul_windowed2_signed, PrecomputedShamir4Data, PrecomputedShamir4Table,
     Windowed2Signed4Data, Windowed2Signed4Table,
 };
 
 pub use ark_bn254::{Fr, G1Affine, G1Projective, G2Affine, G2Projective};
 
 pub use glv_two::{
-    fixed_base_vector_msm_g1,
-    glv_two_precompute,
-    glv_two_precompute_windowed2_signed,
-    glv_two_scalar_mul,
-    glv_two_scalar_mul_decomposed,
-    glv_two_scalar_mul_online,
-    glv_two_scalar_mul_windowed2_signed,
-    DecomposedScalar2D,
-    FixedBasePrecomputedG1,
-    PrecomputedShamir2Data,
-    PrecomputedShamir2Table,
-    Windowed2Signed2Data,
-    Windowed2Signed2Table,
+    fixed_base_vector_msm_g1, glv_two_precompute, glv_two_precompute_windowed2_signed,
+    glv_two_scalar_mul, glv_two_scalar_mul_decomposed, glv_two_scalar_mul_online,
+    glv_two_scalar_mul_windowed2_signed, DecomposedScalar2D, FixedBasePrecomputedG1,
+    PrecomputedShamir2Data, PrecomputedShamir2Table, Windowed2Signed2Data, Windowed2Signed2Table,
 };
 
 pub use dory_utils::{
@@ -53,15 +43,11 @@ pub use dory_utils::{
 pub use frobenius::frobenius_psi_power_projective;
 
 pub use dory_g1::{
-    vector_add_scalar_mul_g1_online,
-    vector_add_scalar_mul_g1_precomputed,
-    vector_add_scalar_mul_g1_windowed2_signed,
-    vector_scalar_mul_add_gamma_g1_online,
+    vector_add_scalar_mul_g1_online, vector_add_scalar_mul_g1_precomputed,
+    vector_add_scalar_mul_g1_windowed2_signed, vector_scalar_mul_add_gamma_g1_online,
 };
 
 pub use dory_g2::{
-    vector_add_scalar_mul_g2_online,
-    vector_add_scalar_mul_g2_precomputed,
-    vector_add_scalar_mul_g2_windowed2_signed,
-    vector_scalar_mul_add_gamma_g2_online,
+    vector_add_scalar_mul_g2_online, vector_add_scalar_mul_g2_precomputed,
+    vector_add_scalar_mul_g2_windowed2_signed, vector_scalar_mul_add_gamma_g2_online,
 };

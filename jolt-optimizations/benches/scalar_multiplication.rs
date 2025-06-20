@@ -8,9 +8,8 @@ use ark_ff::{PrimeField, UniformRand};
 use ark_std::test_rng;
 
 use jolt_optimizations::{
-    glv_four_precompute,
-    glv_four_precompute_windowed2_signed, glv_four_scalar_mul, glv_four_scalar_mul_online,
-    glv_four_scalar_mul_windowed2_signed,
+    glv_four_precompute, glv_four_precompute_windowed2_signed, glv_four_scalar_mul,
+    glv_four_scalar_mul_online, glv_four_scalar_mul_windowed2_signed,
 };
 
 fn bench_scalar_multiplication(c: &mut Criterion) {

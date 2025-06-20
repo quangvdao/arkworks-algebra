@@ -131,7 +131,7 @@ pub fn get_max_coefficient_bits(coeffs: &[u128; 4]) -> usize {
 pub fn decompose_scalar_4d(scalar: Fr) -> ([<Fr as PrimeField>::BigInt; 4], [bool; 4]) {
     let scalar_bigint = fr_to_bigint(scalar);
     let (coeffs_u128, signs) = decompose_scalar_table_based(&scalar_bigint);
-    
+
     // Convert u128 coefficients to BigInt
     let coeffs = [
         Fr::from(coeffs_u128[0]).into_bigint(),
@@ -139,6 +139,6 @@ pub fn decompose_scalar_4d(scalar: Fr) -> ([<Fr as PrimeField>::BigInt; 4], [boo
         Fr::from(coeffs_u128[2]).into_bigint(),
         Fr::from(coeffs_u128[3]).into_bigint(),
     ];
-    
+
     (coeffs, signs)
 }

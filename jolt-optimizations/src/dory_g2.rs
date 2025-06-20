@@ -6,12 +6,12 @@ use rayon::prelude::*;
 
 use crate::decomp_4d::decompose_scalar_4d;
 use crate::frobenius::frobenius_psi_power_projective;
-use crate::{
-    glv_four_scalar_mul_online, glv_four_precompute,
-    glv_four_precompute_windowed2_signed, glv_four_scalar_mul_windowed2_signed,
-    PrecomputedShamir4Data, PrecomputedShamir4Table, Windowed2Signed4Data,
-};
 use crate::glv_four::{shamir_glv_mul_4d, shamir_glv_mul_4d_precomputed};
+use crate::{
+    glv_four_precompute, glv_four_precompute_windowed2_signed, glv_four_scalar_mul_online,
+    glv_four_scalar_mul_windowed2_signed, PrecomputedShamir4Data, PrecomputedShamir4Table,
+    Windowed2Signed4Data,
+};
 
 // ============================================================================
 // Operation 1: v[i] = v[i] + scalar * g[i]
@@ -25,7 +25,7 @@ pub fn vector_add_scalar_mul_g2_online(
 ) {
     assert_eq!(v.len(), generators.len());
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     v.par_iter_mut()
         .zip(generators.par_iter())
         .for_each(|(vi, gen)| {
@@ -47,7 +47,7 @@ pub fn vector_add_scalar_mul_g2_precomputed(
 ) {
     assert_eq!(v.len(), precomputed_tables.len());
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     v.par_iter_mut()
         .zip(precomputed_tables.par_iter())
         .for_each(|(vi, table)| {
@@ -62,10 +62,10 @@ pub fn vector_add_scalar_mul_g2_windowed2_signed(
     precomputed_generators: &Windowed2Signed4Data,
 ) {
     assert_eq!(v.len(), precomputed_generators.windowed2_tables.len());
-    
+
     // Use the GLV scalar multiplication on the generators
     let products = glv_four_scalar_mul_windowed2_signed(precomputed_generators, scalar);
-    
+
     // Add products to v
     v.par_iter_mut()
         .zip(products.par_iter())
@@ -86,7 +86,7 @@ pub fn vector_scalar_mul_add_gamma_g2_online(
 ) {
     assert_eq!(v.len(), gamma.len());
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     v.par_iter_mut()
         .zip(gamma.par_iter())
         .for_each(|(vi, &gamma_i)| {
@@ -119,10 +119,10 @@ pub fn vector_scalar_mul_add_gamma_g2_windowed2_signed(
     gamma: &[G2Projective],
 ) {
     assert_eq!(v.len(), gamma.len());
-    
+
     // Compute scalar * v[i] for all i using online method
     let products = glv_four_scalar_mul_online(scalar, v);
-    
+
     // Replace v with products + gamma
     v.par_iter_mut()
         .zip(products.par_iter())
@@ -142,6 +142,8 @@ pub fn precompute_g2_generators(generators: &[G2Projective]) -> PrecomputedShami
 }
 
 /// Precompute 2-bit signed tables for a set of G2 generators
-pub fn precompute_g2_generators_windowed2_signed(generators: &[G2Projective]) -> Windowed2Signed4Data {
+pub fn precompute_g2_generators_windowed2_signed(
+    generators: &[G2Projective],
+) -> Windowed2Signed4Data {
     glv_four_precompute_windowed2_signed(generators)
 }

@@ -1,13 +1,12 @@
 use ark_bn254::{Fr, G2Affine, G2Projective};
+use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ec::PrimeGroup;
-use ark_ec::{AdditiveGroup, AffineRepr};
 use ark_ff::{PrimeField, UniformRand};
 use ark_std::test_rng;
 use jolt_optimizations::{
-    glv_four_precompute, glv_four_precompute_windowed2_signed, 
-    glv_four_scalar_mul, glv_four_scalar_mul_online,
-    glv_four_scalar_mul_windowed2_signed,
+    glv_four_precompute, glv_four_precompute_windowed2_signed, glv_four_scalar_mul,
+    glv_four_scalar_mul_online, glv_four_scalar_mul_windowed2_signed,
 };
 
 /// Helper function to perform naive scalar multiplication
@@ -112,19 +111,6 @@ fn test_all_methods_correctness() {
             );
         }
         println!("  ✓ Windowed2 signed method passed");
-
-        // // Test 2-bit compact method (balanced option)
-        // let windowed2_compact_data = glv_four_precompute_windowed2_compact(&points);
-        // let windowed2_compact_results = glv_four_scalar_mul_windowed2_compact(&windowed2_compact_data, scalar);
-        // assert_eq!(windowed2_compact_results.len(), naive_results.len(), "Windowed2 compact method: wrong number of results");
-        // for (i, (naive, glv)) in naive_results.iter().zip(windowed2_compact_results.iter()).enumerate() {
-        //     assert!(
-        //         points_equal(naive, glv),
-        //         "Windowed2 compact method: Point {} mismatch. Naive: {:?}, GLV: {:?}",
-        //         i, naive, glv
-        //     );
-        // }
-        // println!("  ✓ Windowed2 compact method passed");
     }
 
     println!("\n🎉 All methods passed correctness tests!");
@@ -186,12 +172,6 @@ fn test_edge_cases() {
                 scalar
             );
         }
-
-        // let windowed2_compact_data = glv_four_precompute_windowed2_compact(&points);
-        // let windowed2_compact_results = glv_four_scalar_mul_windowed2_compact(&windowed2_compact_data, scalar);
-        // for (naive, glv) in naive_results.iter().zip(windowed2_compact_results.iter()) {
-        //     assert!(points_equal(naive, glv), "Edge case failed for windowed2 compact method with scalar {:?}", scalar);
-        // }
     }
 
     println!("✓ All edge cases passed!");
@@ -261,52 +241,3 @@ fn test_large_scalars() {
 
     println!("✓ All large scalar tests passed!");
 }
-
-// /// Test consistency between all methods (they should all give the same result)
-// #[test]
-// fn test_method_consistency() {
-//     let mut rng = test_rng();
-
-//     // Generate test data
-//     let points: Vec<G2Projective> = (0..5)
-//         .map(|_| G2Affine::rand(&mut rng).into_group())
-//         .collect();
-
-//     for i in 0..5 {
-//         let scalar = Fr::rand(&mut rng);
-
-//         println!("Testing method consistency {}/5", i + 1);
-
-//         // Get results from all methods
-//         let online_results = glv_four_scalar_mul_online(scalar, &points);
-
-//         let precomputed_data = glv_four_precompute(&points);
-//         let precomputed_results = glv_four_scalar_mul(&precomputed_data, scalar);
-
-//         let windowed_data = glv_four_precompute_windowed(&points);
-//         let windowed_results = glv_four_scalar_mul_windowed(&windowed_data, scalar);
-
-//         let windowed2_signed_data = glv_four_precompute_windowed2_signed(&points);
-//         let windowed2_signed_results = glv_four_scalar_mul_windowed2_signed(&windowed2_signed_data, scalar);
-
-//         let windowed2_compact_data = glv_four_precompute_windowed2_compact(&points);
-//         let windowed2_compact_results = glv_four_scalar_mul_windowed2_compact(&windowed2_compact_data, scalar);
-
-//         // Compare all methods against each other
-//         for (j, ((((online, precomputed), windowed), signed), compact)) in online_results
-//             .iter()
-//             .zip(precomputed_results.iter())
-//             .zip(windowed_results.iter())
-//             .zip(windowed2_signed_results.iter())
-//             .zip(windowed2_compact_results.iter())
-//             .enumerate()
-//         {
-//             assert!(points_equal(online, precomputed), "Point {}: Online vs Precomputed mismatch", j);
-//             assert!(points_equal(online, windowed), "Point {}: Online vs Windowed mismatch", j);
-//             assert!(points_equal(online, signed), "Point {}: Online vs Windowed2Signed mismatch", j);
-//             assert!(points_equal(online, compact), "Point {}: Online vs Windowed2Compact mismatch", j);
-//         }
-//     }
-
-//     println!("✓ All methods are consistent with each other!");
-// }

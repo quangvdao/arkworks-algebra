@@ -11,11 +11,10 @@ use rayon::prelude::*;
 use crate::decomp_4d::decompose_scalar_4d;
 use crate::frobenius::frobenius_psi_power_projective;
 
-
 /// Online 4D GLV scalar multiplication
 pub fn glv_four_scalar_mul_online(scalar: Fr, points: &[G2Projective]) -> Vec<G2Projective> {
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     points
         .par_iter()
         .map(|point| {
@@ -26,7 +25,7 @@ pub fn glv_four_scalar_mul_online(scalar: Fr, points: &[G2Projective]) -> Vec<G2
                 frobenius_psi_power_projective(point, 2),
                 frobenius_psi_power_projective(point, 3),
             ];
-            
+
             // Shamir's trick with sign handling
             shamir_glv_mul_4d(&bases, &coeffs, &signs)
         })
@@ -40,11 +39,15 @@ pub(crate) fn shamir_glv_mul_4d(
     signs: &[bool; 4],
 ) -> G2Projective {
     let mut result = G2Projective::zero();
-    let max_bits = coeffs.iter().map(|c| c.num_bits() as usize).max().unwrap_or(0);
-    
+    let max_bits = coeffs
+        .iter()
+        .map(|c| c.num_bits() as usize)
+        .max()
+        .unwrap_or(0);
+
     for bit_idx in (0..max_bits).rev() {
         result = result.double();
-        
+
         // Check bits and accumulate
         for (i, coeff) in coeffs.iter().enumerate() {
             if coeff.get_bit(bit_idx) {
@@ -58,7 +61,7 @@ pub(crate) fn shamir_glv_mul_4d(
             }
         }
     }
-    
+
     result
 }
 
@@ -78,11 +81,11 @@ impl PrecomputedShamir4Table {
     /// Create table for [P, ψ(P), ψ²(P), ψ³(P)] with all sign combinations
     pub fn new(bases: &[G2Projective; 4]) -> Self {
         let mut table = vec![G2Projective::zero(); 256];
-        
+
         table.par_iter_mut().enumerate().for_each(|(idx, point)| {
-            let point_mask = idx & 0xF;  // Which points to include
-            let sign_mask = idx >> 4;    // Which points to negate
-            
+            let point_mask = idx & 0xF; // Which points to include
+            let sign_mask = idx >> 4; // Which points to negate
+
             *point = G2Projective::zero();
             for i in 0..4 {
                 if (point_mask >> i) & 1 == 1 {
@@ -94,10 +97,10 @@ impl PrecomputedShamir4Table {
                 }
             }
         });
-        
+
         Self { table }
     }
-    
+
     #[inline]
     pub fn get(&self, point_mask: usize, sign_mask: usize) -> G2Projective {
         self.table[point_mask | (sign_mask << 4)]
@@ -118,7 +121,7 @@ impl PrecomputedShamir4Data {
                 PrecomputedShamir4Table::new(&frobenius_bases)
             })
             .collect();
-        
+
         Self { shamir_tables }
     }
 }
@@ -131,7 +134,7 @@ pub fn glv_four_precompute(points: &[G2Projective]) -> PrecomputedShamir4Data {
 /// Scalar multiplication using precomputed data
 pub fn glv_four_scalar_mul(data: &PrecomputedShamir4Data, scalar: Fr) -> Vec<G2Projective> {
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     data.shamir_tables
         .par_iter()
         .map(|table| shamir_glv_mul_4d_precomputed(table, &coeffs, &signs))
@@ -145,15 +148,19 @@ pub(crate) fn shamir_glv_mul_4d_precomputed(
     signs: &[bool; 4],
 ) -> G2Projective {
     let mut result = G2Projective::zero();
-    let max_bits = coeffs.iter().map(|c| c.num_bits() as usize).max().unwrap_or(0);
-    
+    let max_bits = coeffs
+        .iter()
+        .map(|c| c.num_bits() as usize)
+        .max()
+        .unwrap_or(0);
+
     for bit_idx in (0..max_bits).rev() {
         result = result.double();
-        
+
         // Build masks for table lookup
         let mut point_mask = 0;
         let mut sign_mask = 0;
-        
+
         for i in 0..4 {
             if coeffs[i].get_bit(bit_idx) {
                 point_mask |= 1 << i;
@@ -163,15 +170,14 @@ pub(crate) fn shamir_glv_mul_4d_precomputed(
                 }
             }
         }
-        
+
         if point_mask != 0 {
             result += table.get(point_mask, sign_mask);
         }
     }
-    
+
     result
 }
-
 
 /// Precomputed data for 2-bit windowed signed method
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
@@ -189,25 +195,25 @@ impl Windowed2Signed4Table {
     /// Create signed multiples for 2-bit processing
     pub fn new(bases: &[G2Projective; 4]) -> Self {
         let mut signed_multiples = vec![G2Projective::zero(); 24];
-        
+
         for (base_idx, &base) in bases.iter().enumerate() {
             let offset = base_idx * 6;
-            signed_multiples[offset] = base;                      // 1*base
-            signed_multiples[offset + 1] = base.double();         // 2*base
-            signed_multiples[offset + 2] = base + base.double();  // 3*base
-            signed_multiples[offset + 3] = -base;                 // -1*base
-            signed_multiples[offset + 4] = -base.double();        // -2*base
+            signed_multiples[offset] = base; // 1*base
+            signed_multiples[offset + 1] = base.double(); // 2*base
+            signed_multiples[offset + 2] = base + base.double(); // 3*base
+            signed_multiples[offset + 3] = -base; // -1*base
+            signed_multiples[offset + 4] = -base.double(); // -2*base
             signed_multiples[offset + 5] = -(base + base.double()); // -3*base
         }
-        
+
         Self { signed_multiples }
     }
-    
+
     /// Get 2-bit windowed combination
     #[inline]
     pub fn get_windowed2(&self, coeffs: &[i8; 4]) -> G2Projective {
         let mut result = G2Projective::zero();
-        
+
         for (i, &coeff) in coeffs.iter().enumerate() {
             if coeff != 0 {
                 let abs_coeff = coeff.abs() as usize;
@@ -217,7 +223,7 @@ impl Windowed2Signed4Table {
                 }
             }
         }
-        
+
         result
     }
 }
@@ -236,7 +242,7 @@ impl Windowed2Signed4Data {
                 Windowed2Signed4Table::new(&frobenius_bases)
             })
             .collect();
-        
+
         Self { windowed2_tables }
     }
 }
@@ -252,7 +258,7 @@ pub fn glv_four_scalar_mul_windowed2_signed(
     scalar: Fr,
 ) -> Vec<G2Projective> {
     let (coeffs, signs) = decompose_scalar_4d(scalar);
-    
+
     data.windowed2_tables
         .par_iter()
         .map(|table| glv_four_scalar_mul_windowed2_signed_single(table, &coeffs, &signs))
@@ -272,7 +278,7 @@ fn glv_four_scalar_mul_windowed2_signed_single(
         .map(|(scalar, &is_negative)| {
             let mut coeffs = Vec::new();
             let scalar_ref = scalar.as_ref();
-            
+
             // Convert to base-4 coefficients (2 bits at a time)
             for limb in scalar_ref {
                 for window_idx in 0..32 {
@@ -286,11 +292,11 @@ fn glv_four_scalar_mul_windowed2_signed_single(
                     coeffs.push(signed_coeff);
                 }
             }
-            
+
             coeffs
         })
         .collect();
-    
+
     // Find maximum coefficient length
     let max_coeffs = scalar_coeffs
         .iter()
@@ -303,14 +309,14 @@ fn glv_four_scalar_mul_windowed2_signed_single(
         })
         .max()
         .unwrap_or(0);
-    
+
     // 2-bit windowed processing: process 2 bits at a time
     let mut result = G2Projective::zero();
-    
+
     for coeff_idx in (0..max_coeffs).rev() {
         // Quadruple (process 2 bits)
         result = result.double().double();
-        
+
         // Extract coefficients for this window
         let mut window_coeffs = [0i8; 4];
         for i in 0..4 {
@@ -318,13 +324,13 @@ fn glv_four_scalar_mul_windowed2_signed_single(
                 window_coeffs[i] = scalar_coeffs[i][coeff_idx];
             }
         }
-        
+
         // Use signed lookup if any coefficient is non-zero
         if window_coeffs.iter().any(|&c| c != 0) {
             result += table.get_windowed2(&window_coeffs);
         }
     }
-    
+
     result
 }
 
