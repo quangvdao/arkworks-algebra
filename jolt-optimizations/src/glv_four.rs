@@ -71,13 +71,13 @@ pub struct PrecomputedShamir4Data {
 /// Shamir lookup table: all 256 combinations for [P, ψ(P), ψ²(P), ψ³(P)] with signs
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PrecomputedShamir4Table {
-    pub table: [G2Projective; 256], // 2^4 points × 2^4 signs
+    pub table: Vec<G2Projective>, // 2^4 points × 2^4 signs (256 elements)
 }
 
 impl PrecomputedShamir4Table {
     /// Create table for [P, ψ(P), ψ²(P), ψ³(P)] with all sign combinations
     pub fn new(bases: &[G2Projective; 4]) -> Self {
-        let mut table = [G2Projective::zero(); 256];
+        let mut table = vec![G2Projective::zero(); 256];
         
         table.par_iter_mut().enumerate().for_each(|(idx, point)| {
             let point_mask = idx & 0xF;  // Which points to include
@@ -180,13 +180,13 @@ pub struct Windowed2Signed4Data {
 
 /// 2-bit signed table: stores [±P, ±2P, ±3P] for each base
 pub struct Windowed2Signed4Table {
-    pub signed_multiples: [G2Projective; 24], // 4 bases × 6 variants
+    pub signed_multiples: Vec<G2Projective>, // 4 bases × 6 variants (24 elements)
 }
 
 impl Windowed2Signed4Table {
     /// Create signed multiples for 2-bit processing
     pub fn new(bases: &[G2Projective; 4]) -> Self {
-        let mut signed_multiples = [G2Projective::zero(); 24];
+        let mut signed_multiples = vec![G2Projective::zero(); 24];
         
         for (base_idx, &base) in bases.iter().enumerate() {
             let offset = base_idx * 6;
