@@ -10,7 +10,6 @@ use rayon::prelude::*;
 
 use crate::decomp_2d::{decompose_scalar_2d, glv_endomorphism};
 
-
 /// Online 2D GLV scalar multiplication
 pub fn glv_two_scalar_mul_online(scalar: Fr, points: &[G1Projective]) -> Vec<G1Projective> {
     let (coeffs, signs) = decompose_scalar_2d(scalar);
@@ -57,7 +56,6 @@ pub(crate) fn shamir_glv_mul_2d(
 
     result
 }
-
 
 /// Precomputed data for 2D GLV with Shamir table
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]

@@ -118,8 +118,5 @@ fn bench_vector_scalar_mul_add(c: &mut Criterion) {
     }
 }
 
-criterion_group!(
-    benches,
-    bench_vector_scalar_mul_add,
-);
+criterion_group!(benches, bench_vector_scalar_mul_add,);
 criterion_main!(benches);

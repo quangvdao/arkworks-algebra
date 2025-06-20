@@ -6,7 +6,9 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use crate::decomp_4d::{decompose_scalar_table_based, fr_to_bigint, u128_to_fr};
 use crate::frobenius::frobenius_psi_power_projective;
-use crate::glv_four::{shamir_glv_mul_4d_precomputed, PrecomputedShamir4Data, PrecomputedShamir4Table};
+use crate::glv_four::{
+    shamir_glv_mul_4d_precomputed, PrecomputedShamir4Data, PrecomputedShamir4Table,
+};
 
 /// Helper function to decompose a scalar into 4D GLV form
 fn decompose_scalar(scalar: Fr) -> ([<Fr as PrimeField>::BigInt; 4], [bool; 4]) {
@@ -174,8 +176,11 @@ pub fn vector_scalar_mul_v_add_g_precomputed(
             let shamir_table = PrecomputedShamir4Table::new(&frobenius_bases);
 
             // Perform scalar multiplication: scalar * v[i] + generators[i]
-            let v_scaled =
-                shamir_glv_mul_4d_precomputed(&shamir_table, &data.scalar_coeffs, &data.scalar_signs);
+            let v_scaled = shamir_glv_mul_4d_precomputed(
+                &shamir_table,
+                &data.scalar_coeffs,
+                &data.scalar_signs,
+            );
             *v_point = v_scaled + generator;
         });
 }

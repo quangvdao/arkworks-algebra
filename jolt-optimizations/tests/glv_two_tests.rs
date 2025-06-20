@@ -86,7 +86,11 @@ fn test_g1_vector_scalar_mul_add() {
 
     // Test precomputed version
     let precomputed_generators = PrecomputedShamir2Data::new(&generators);
-    vector_add_scalar_mul_g1_precomputed(&mut v_precomputed, scalar, &precomputed_generators.shamir_tables);
+    vector_add_scalar_mul_g1_precomputed(
+        &mut v_precomputed,
+        scalar,
+        &precomputed_generators.shamir_tables,
+    );
 
     // Test windowed2 signed version
     let windowed2_generators = Windowed2Signed2Data::new(&generators);
