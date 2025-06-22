@@ -370,7 +370,7 @@ fn preamble<A, B>(bases: &mut &[A], scalars: &mut &[B]) -> Option<usize> {
 
 /// Computes multi-scalar multiplication where the scalars
 /// lie in the range {-1, 0, 1}.
-fn msm_binary<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[bool]) -> V {
+pub fn msm_binary<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[bool]) -> V {
     let chunk_size = match preamble(&mut bases, &mut scalars) {
         Some(chunk_size) => chunk_size,
         None => return V::zero(),
@@ -389,7 +389,7 @@ fn msm_binary<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[bool]
         .sum()
 }
 
-fn msm_u8<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u8]) -> V {
+pub fn msm_u8<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u8]) -> V {
     let chunk_size = match preamble(&mut bases, &mut scalars) {
         Some(chunk_size) => chunk_size,
         None => return V::zero(),
@@ -400,7 +400,7 @@ fn msm_u8<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u8]) -> V
         .sum()
 }
 
-fn msm_u16<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u16]) -> V {
+pub fn msm_u16<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u16]) -> V {
     let chunk_size = match preamble(&mut bases, &mut scalars) {
         Some(chunk_size) => chunk_size,
         None => return V::zero(),
@@ -411,7 +411,7 @@ fn msm_u16<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u16]) ->
         .sum()
 }
 
-fn msm_u32<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u32]) -> V {
+pub fn msm_u32<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u32]) -> V {
     let chunk_size = match preamble(&mut bases, &mut scalars) {
         Some(chunk_size) => chunk_size,
         None => return V::zero(),
@@ -422,7 +422,7 @@ fn msm_u32<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u32]) ->
         .sum()
 }
 
-fn msm_u64<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u64]) -> V {
+pub fn msm_u64<V: VariableBaseMSM>(mut bases: &[V::MulBase], mut scalars: &[u64]) -> V {
     let chunk_size = match preamble(&mut bases, &mut scalars) {
         Some(chunk_size) => chunk_size,
         None => return V::zero(),
