@@ -7,8 +7,8 @@ use ark_bn254::Fq2;
 use ark_bn254::Fr;
 use ark_ff::MontFp;
 
-// Include the generated power of 2 decompositions table
-include!(concat!(env!("OUT_DIR"), "/power_of_2_decompositions.rs"));
+// Include the precomputed power of 2 decompositions table
+include!("power_of_2_decompositions.rs");
 
 /// Frobenius endomorphism coefficients for BN254 G2
 pub struct FrobeniusCoefficients {
