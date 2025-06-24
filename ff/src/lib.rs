@@ -6,7 +6,6 @@
     rust_2018_idioms,
     rust_2021_compatibility
 )]
-#![feature(bigint_helper_methods)]
 #![allow(clippy::op_ref, clippy::suspicious_op_assign_impl)]
 #![deny(unsafe_code)]
 #![doc = include_str!("../README.md")]
