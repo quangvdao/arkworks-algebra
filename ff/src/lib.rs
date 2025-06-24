@@ -7,7 +7,6 @@
     rust_2021_compatibility,
     clippy::missing_const_for_fn
 )]
-#![feature(bigint_helper_methods)]
 #![allow(clippy::op_ref, clippy::suspicious_op_assign_impl)]
 #![deny(unsafe_code)]
 #![doc = include_str!("../README.md")]

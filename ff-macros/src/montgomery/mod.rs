@@ -26,7 +26,6 @@ pub(crate) fn mont_config_helper(
     generator: BigUint,
     small_subgroup_base: Option<u32>,
     small_subgroup_power: Option<u32>,
-    yd_opt: bool,
     config_name: proc_macro2::Ident,
 ) -> proc_macro2::TokenStream {
     let mut limbs = 1usize;
@@ -76,7 +75,6 @@ pub(crate) fn mont_config_helper(
     let double_in_place = double_in_place_impl(modulus_has_spare_bit);
     let mul_assign = mul_assign_impl(
         can_use_no_carry_mul_opt,
-        yd_opt,
         limbs,
         &modulus_limbs,
         modulus_has_spare_bit,
@@ -86,7 +84,6 @@ pub(crate) fn mont_config_helper(
         limbs,
         &modulus_limbs,
         modulus_has_spare_bit,
-        yd_opt,
     );
     let sum_of_products = sum_of_products_impl(limbs, &modulus_limbs);
 
@@ -115,9 +112,6 @@ pub(crate) fn mont_config_helper(
                 const GENERATOR: F = ark_ff::MontFp!(#generator);
 
                 const TWO_ADIC_ROOT_OF_UNITY: F = ark_ff::MontFp!(#two_adic_root_of_unity);
-
-                // Include the new YD_OPT constant
-                const YD_OPT: bool = #yd_opt;
 
                 #mixed_radix
 

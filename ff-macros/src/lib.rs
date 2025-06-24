@@ -5,14 +5,15 @@
     rust_2018_idioms,
     rust_2021_compatibility
 )]
-#![feature(bigint_helper_methods)]
 #![forbid(unsafe_code)]
+
 use num_bigint::BigUint;
 use proc_macro::TokenStream;
 use syn::{Expr, ExprLit, Item, ItemFn, Lit, Meta};
 
 mod montgomery;
 mod unroll;
+
 pub(crate) mod utils;
 
 #[proc_macro]
@@ -38,7 +39,7 @@ pub fn to_sign_and_limbs(input: TokenStream) -> TokenStream {
 // This code was adapted from the `PrimeField` Derive Macro in ff-derive.
 #[proc_macro_derive(
     MontConfig,
-    attributes(modulus, generator, small_subgroup_base, small_subgroup_power, yd_opt)
+    attributes(modulus, generator, small_subgroup_base, small_subgroup_power)
 )]
 pub fn mont_config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the type definition
@@ -63,15 +64,11 @@ pub fn mont_config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let small_subgroup_power: Option<u32> = fetch_attr("small_subgroup_power", &ast.attrs)
         .map(|s| s.parse().expect("small_subgroup_power should be a number"));
 
-    let yd_opt: bool = fetch_attr("yd_opt", &ast.attrs)
-        .map(|s| s.parse().expect("yd_opt should be a boolean"))
-        .unwrap_or(false); // Default to false if not provided
     montgomery::mont_config_helper(
         modulus,
         generator,
         small_subgroup_base,
         small_subgroup_power,
-        yd_opt,
         ast.ident,
     )
     .into()
