@@ -134,6 +134,15 @@ mod tests {
 
         let batch_result = batch_g1_additions(&bases, &indices);
 
-        assert!(!batch_result.is_zero() || indices.is_empty());
+        // Compute expected result using naive sequential addition
+        let mut expected = G1Affine::zero();
+        for &idx in &indices {
+            expected = (expected + bases[idx]).into_affine();
+        }
+
+        assert_eq!(
+            batch_result, expected,
+            "Stress test failed: batch result doesn't match expected sum"
+        );
     }
 }
