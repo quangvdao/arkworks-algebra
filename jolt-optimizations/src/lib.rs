@@ -8,6 +8,7 @@
 //! Also provides BN254 G1 equivalents.
 //! Uses Strauss-shamir batched scalar multiplication to maximally take advantage of GLV.
 
+pub mod batch_addition;
 pub mod constants;
 pub mod decomp_2d;
 pub mod decomp_4d;
@@ -51,3 +52,5 @@ pub use dory_g2::{
     vector_add_scalar_mul_g2_online, vector_add_scalar_mul_g2_precomputed,
     vector_add_scalar_mul_g2_windowed2_signed, vector_scalar_mul_add_gamma_g2_online,
 };
+
+pub use batch_addition::batch_g1_additions;
