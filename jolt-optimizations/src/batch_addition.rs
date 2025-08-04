@@ -2,7 +2,7 @@
 //!
 //! Implements efficient batch addition of affine elliptic curve points
 //! using Montgomery's batch inversion trick to minimize field inversions.
-
+//! @TODO(markosg04) duplicate group elements?
 use ark_bn254::G1Affine;
 use ark_ec::AffineRepr;
 use rayon::prelude::*;
@@ -63,7 +63,7 @@ pub fn batch_g1_additions(bases: &[G1Affine], indices: &[usize]) -> G1Affine {
                 let lambda = (p2.y - p1.y) * inv;
                 let x3 = lambda * lambda - p1.x - p2.x;
                 let y3 = lambda * (p1.x - x3) - p1.y;
-                G1Affine::new(x3, y3)
+                G1Affine::new_unchecked(x3, y3)
             })
             .collect();
 
@@ -76,6 +76,95 @@ pub fn batch_g1_additions(bases: &[G1Affine], indices: &[usize]) -> G1Affine {
     }
 
     points[0]
+}
+
+/// Performs multiple batch additions of G1 affine points in parallel.
+///
+/// Given a slice of base points and multiple sets of indices, computes the sum
+/// for each set of indices. All additions across all batches share the same
+/// batch inversion.
+///
+/// # Arguments
+/// * `bases` - Slice of G1 affine points to select from
+/// * `indices_sets` - Vector of index vectors, each specifying which points to sum
+///
+/// # Returns
+/// Vector of sums, one for each index set
+pub fn batch_g1_additions_multi(bases: &[G1Affine], indices_sets: &[Vec<usize>]) -> Vec<G1Affine> {
+    if indices_sets.is_empty() {
+        return vec![];
+    }
+
+    // Initialize working sets for each batch
+    let mut working_sets: Vec<Vec<G1Affine>> = indices_sets
+        .par_iter()
+        .map(|indices| {
+            if indices.is_empty() {
+                vec![G1Affine::zero()]
+            } else if indices.len() == 1 {
+                vec![bases[indices[0]]]
+            } else {
+                indices.iter().map(|&i| bases[i]).collect()
+            }
+        })
+        .collect();
+
+    // Continue until all sets have been reduced to a single point
+    loop {
+        // Count total number of pairs across all sets
+        let total_pairs: usize = working_sets.iter().map(|set| set.len() / 2).sum();
+
+        if total_pairs == 0 {
+            break;
+        }
+
+        // Collect all denominators across all sets
+        let mut all_denominators = Vec::with_capacity(total_pairs);
+        let mut pair_info = Vec::with_capacity(total_pairs);
+
+        for (set_idx, set) in working_sets.iter().enumerate() {
+            let pairs_in_set = set.len() / 2;
+            for pair_idx in 0..pairs_in_set {
+                let p1 = set[pair_idx * 2];
+                let p2 = set[pair_idx * 2 + 1];
+                all_denominators.push(p2.x - p1.x);
+                pair_info.push((set_idx, pair_idx));
+            }
+        }
+
+        // Batch invert all denominators at once
+        let mut inverses = all_denominators;
+        ark_ff::fields::batch_inversion(&mut inverses);
+
+        // Apply additions using the inverted denominators
+        let mut new_working_sets: Vec<Vec<G1Affine>> = working_sets
+            .iter()
+            .map(|set| Vec::with_capacity((set.len() + 1) / 2))
+            .collect();
+
+        // Process additions and maintain order
+        for ((set_idx, pair_idx), inv) in pair_info.iter().zip(inverses.iter()) {
+            let set = &working_sets[*set_idx];
+            let p1 = set[*pair_idx * 2];
+            let p2 = set[*pair_idx * 2 + 1];
+            let lambda = (p2.y - p1.y) * inv;
+            let x3 = lambda * lambda - p1.x - p2.x;
+            let y3 = lambda * (p1.x - x3) - p1.y;
+            new_working_sets[*set_idx].push(G1Affine::new_unchecked(x3, y3));
+        }
+
+        // Handle odd elements
+        for (set_idx, set) in working_sets.iter().enumerate() {
+            if set.len() % 2 == 1 {
+                new_working_sets[set_idx].push(set[set.len() - 1]);
+            }
+        }
+
+        working_sets = new_working_sets;
+    }
+
+    // Extract final results
+    working_sets.into_iter().map(|set| set[0]).collect()
 }
 
 #[cfg(test)]
@@ -123,8 +212,8 @@ mod tests {
     fn test_stress_test_correctness() {
         let mut rng = ark_std::test_rng();
 
-        let base_size = 10000;
-        let indices_size = 5000;
+        let base_size = 100000;
+        let indices_size = 50000;
 
         let bases: Vec<G1Affine> = (0..base_size).map(|_| G1Affine::rand(&mut rng)).collect();
 
@@ -134,7 +223,6 @@ mod tests {
 
         let batch_result = batch_g1_additions(&bases, &indices);
 
-        // Compute expected result using naive sequential addition
         let mut expected = G1Affine::zero();
         for &idx in &indices {
             expected = (expected + bases[idx]).into_affine();
@@ -144,5 +232,35 @@ mod tests {
             batch_result, expected,
             "Stress test failed: batch result doesn't match expected sum"
         );
+    }
+
+    #[test]
+    fn test_batch_additions_multi_large() {
+        let mut rng = ark_std::test_rng();
+
+        let base_size = 10000;
+        let num_batches = 50;
+
+        let bases: Vec<G1Affine> = (0..base_size).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let indices_sets: Vec<Vec<usize>> = (0..num_batches)
+            .map(|_| {
+                let size = (rng.next_u64() as usize) % 100 + 1;
+                (0..size)
+                    .map(|_| (rng.next_u64() as usize) % base_size)
+                    .collect()
+            })
+            .collect();
+
+        let batch_results = batch_g1_additions_multi(&bases, &indices_sets);
+
+        for (i, (result, indices)) in batch_results.iter().zip(indices_sets.iter()).enumerate() {
+            let single_result = batch_g1_additions(&bases, indices);
+            assert_eq!(
+                *result, single_result,
+                "Multi vs single mismatch at batch {}",
+                i
+            );
+        }
     }
 }
