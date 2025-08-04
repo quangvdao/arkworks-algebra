@@ -53,4 +53,4 @@ pub use dory_g2::{
     vector_add_scalar_mul_g2_windowed2_signed, vector_scalar_mul_add_gamma_g2_online,
 };
 
-pub use batch_addition::batch_g1_additions;
+pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
