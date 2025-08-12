@@ -2,6 +2,8 @@ use crate::{
     AdditiveGroup, BigInt, BigInteger, FftField, Field, LegendreSymbol, One, PrimeField,
     SqrtPrecomputation, Zero,
 };
+#[cfg(feature = "allocative")]
+use allocative::Allocative;
 use ark_serialize::{
     buffer_byte_size, CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
     CanonicalSerializeWithFlags, Compress, EmptyFlags, Flags, SerializationError, Valid, Validate,
@@ -101,7 +103,7 @@ pub trait FpConfig<const N: usize>: Send + Sync + 'static + Sized {
     /// 1)`.
     fn into_bigint(other: Fp<Self, N>) -> BigInt<N>;
 
-    /// Creates a field element from a `u64`. 
+    /// Creates a field element from a `u64`.
     /// Returns `None` if the `u64` is larger than or equal to the modulus.
     fn from_u64(val: u64) -> Option<Fp<Self, N>>;
 }
@@ -117,6 +119,11 @@ pub struct Fp<P: FpConfig<N>, const N: usize>(
     pub BigInt<N>,
     #[doc(hidden)] pub PhantomData<P>,
 );
+
+#[cfg(feature = "allocative")]
+impl<P: FpConfig<N>, const N: usize> Allocative for Fp<P, N> {
+    fn visit<'a, 'b: 'a>(&self, _visitor: &'a mut allocative::Visitor<'b>) {}
+}
 
 pub type Fp64<P> = Fp<P, 1>;
 pub type Fp128<P> = Fp<P, 2>;
