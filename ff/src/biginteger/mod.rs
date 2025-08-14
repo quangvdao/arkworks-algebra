@@ -536,6 +536,32 @@ impl<const N: usize> BigInteger for BigInt<N> {
 
     #[inline]
     #[unroll_for_loops(8)]
+    fn fmu64a<const NPLUS1: usize>(&self, other: u64, acc: &mut BigInt<NPLUS1>) {
+        // ensure NPLUS1 is the correct size
+        debug_assert!(NPLUS1 == N + 1);
+        // special cases for 0 and 1
+        if other == 0 || self.is_zero() {
+            // idempotent
+            return;
+        } else if other == 1 {
+            // just addition
+            let mut carry = 0;
+            for i in 0..N {
+                carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
+            }
+            acc.0[N] += carry as u64;
+            return;
+        }
+        // otherwise fma
+        let mut carry = 0;
+        for i in 0..N {
+            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other, &mut carry);
+        }
+        acc.0[N] += carry as u64;
+    }
+
+    #[inline]
+    #[unroll_for_loops(8)]
     fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(
         &self,
         other: u128,
@@ -1246,6 +1272,10 @@ pub trait BigInteger:
 
     /// NEW! Multiplies self by a u64, returning a bigint with one extra limb to hold overflow.
     fn mul_u64_w_carry<const NPLUS1: usize>(&self, other: u64) -> BigInt<NPLUS1>;
+
+    /// NEW! Multiplies self by a u64, accumulating the result in `acc`, which must have one extra limb.
+    /// overflow causes a wraparound in the highest limb of the accumulator.
+    fn fmu64a<const NPLUS1: usize>(&self, other: u64, acc: &mut BigInt<NPLUS1>);
 
     /// NEW! Multiplies self by a u128, returning a bigint with two extra limbs to hold overflow.
     fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(
