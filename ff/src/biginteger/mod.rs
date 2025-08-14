@@ -444,6 +444,103 @@ impl<const N: usize> BigInteger for BigInt<N> {
     }
 
     #[inline]
+    #[unroll_for_loops(8)]
+    fn mul_u64_in_place(&mut self, other: u64) {
+        // special cases for 0 and 1
+        if other == 0 || self.is_zero() {
+            *self = Self::zero();
+            return;
+        } else if other == 1 {
+            return;
+        }
+        // Calculate the full 128-bit product of the lowest limb
+        let mut prod: u128 = (self.0[0] as u128) * (other as u128);
+        self.0[0] = prod as u64;
+        let mut carry = (prod >> 64) as u64;
+        // iterate through the remaining limbs
+        for i in 1..N {
+            // Calculate the full 128-bit product of the current limb and the u64 multiplier
+            prod = (self.0[i] as u128) * (other as u128) + (carry as u128);
+            self.0[i] = prod as u64;
+            carry = (prod >> 64) as u64;
+        }
+        debug_assert!(carry == 0, "Overflow in BigInt::mul_u64_in_place");
+    }
+
+    #[inline]
+    #[unroll_for_loops(8)]
+    fn mul_u64_w_carry<const NPLUS1: usize>(&self, other: u64) -> BigInt<NPLUS1> {
+        // ensure NPLUS1 is the correct size
+        debug_assert!(NPLUS1 == N + 1);
+        // special cases for 0 and 1
+        if other == 0 || self.is_zero() {
+            return BigInt::<NPLUS1>::zero();
+        } else if other == 1 {
+            let mut res = BigInt::<NPLUS1>::zero();
+            for i in 0..N {
+                res.0[i] = self.0[i];
+            }
+            return res;
+        }
+        // initialize result
+        let mut res: [u64; NPLUS1] = [0u64; NPLUS1];
+        // Calculate the full 128-bit product of the lowest limb
+        let mut prod: u128 = (self.0[0] as u128) * (other as u128);
+        res[0] = prod as u64;
+        let mut carry = (prod >> 64) as u64;
+        // iterate through the remaining limbs
+        for i in 1..N {
+            // Calculate the full 128-bit product of the current limb and the u64 multiplier
+            prod = (self.0[i] as u128) * (other as u128) + (carry as u128);
+            res[i] = prod as u64;
+            carry = (prod >> 64) as u64;
+        }
+        // add final carry
+        res[N] = carry;
+        // and return
+        BigInt::<NPLUS1>(res)
+    }
+
+    #[inline]
+    #[unroll_for_loops(8)]
+    fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(
+        &self,
+        other: u128,
+    ) -> BigInt<NPLUS2> {
+        // NPLUS1 is N + 1, NPLUS2 is N + 2
+        debug_assert!(NPLUS1 == N + 1);
+        debug_assert!(NPLUS2 == N + 2);
+        // special cases for 0 and 1
+        if other == 0 || self.is_zero() {
+            return BigInt::<NPLUS2>::zero();
+        } else if other == 1 {
+            let mut res = BigInt::<NPLUS2>::zero();
+            for i in 0..N {
+                res.0[i] = self.0[i];
+            }
+            return res;
+        }
+        // split other into two u64s
+        let other_lo = other as u64;
+        let other_hi = (other >> 64) as u64;
+        // two u64 multiplications with carry
+        let lo_part = self.mul_u64_w_carry::<NPLUS1>(other_lo);
+        let hi_part = self.mul_u64_w_carry::<NPLUS1>(other_hi);
+        // pad lo_part right by one limb (extra high zero limb)
+        // pad hi_part left by one limb (i.e. multiply by 2^64)
+        let mut lo_padded = BigInt::<NPLUS2>::zero();
+        let mut hi_padded = BigInt::<NPLUS2>::zero();
+        for i in 0..NPLUS1 {
+            lo_padded.0[i] = lo_part.0[i];
+            hi_padded.0[i + 1] = hi_part.0[i];
+        }
+        // add the two padded parts
+        let (res, carry) = lo_padded.const_add_with_carry(&hi_padded);
+        debug_assert!(carry == false, "Overflow in BigInt::mul_u128_w_carry");
+        res
+    }
+
+    #[inline]
     fn mul(&self, other: &Self) -> (Self, Self) {
         if self.is_zero() || other.is_zero() {
             let zero = Self::zero();
@@ -1109,6 +1206,18 @@ pub trait BigInteger:
     /// ```
     #[deprecated(since = "0.4.2", note = "please use the operator `<<` instead")]
     fn muln(&mut self, amt: u32);
+
+    /// NEW! Multiplies self by a u64 in place. Overflow is ignored.
+    fn mul_u64_in_place(&mut self, other: u64);
+
+    /// NEW! Multiplies self by a u64, returning a bigint with one extra limb to hold overflow.
+    fn mul_u64_w_carry<const NPLUS1: usize>(&self, other: u64) -> BigInt<NPLUS1>;
+
+    /// NEW! Multiplies self by a u128, returning a bigint with two extra limbs to hold overflow.
+    fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(
+        &self,
+        other: u128,
+    ) -> BigInt<NPLUS2>;
 
     /// Multiplies this [`BigInteger`] by another `BigInteger`, storing the result in `self`.
     /// Overflow is ignored.
