@@ -318,17 +318,8 @@ impl<const N: usize> BigInt<N> {
     /// leading zeros in the most significant limb.
     #[doc(hidden)]
     pub const fn num_spare_bits(self) -> u32 {
-        // Count the leading zeros in the most significant limb
-        let msb = self.0[N - 1];
-        let mut count = 0;
-        let mut mask = 1u64 << 63; // Start with the highest bit
-
-        while count < 64 && (msb & mask) == 0 {
-            count += 1;
-            mask >>= 1;
-        }
-
-        count
+        // Fast path: directly use the intrinsic on the most significant limb
+        self.0[N - 1].leading_zeros()
     }
 
     #[inline]
@@ -480,23 +471,19 @@ impl<const N: usize> BigInteger for BigInt<N> {
     #[unroll_for_loops(8)]
     fn mul_u64_in_place(&mut self, other: u64) {
         // special cases for 0 and 1
-        if other == 0 || self.is_zero() {
-            *self = Self::zero();
-            return;
-        } else if other == 1 {
-            return;
+        // if other == 0 || self.is_zero() {
+        //     *self = Self::zero();
+        //     return;
+        // } else if other == 1 {
+        //     return;
+        // }
+        // Use the same low-level multiply-accumulate primitive that already
+        // benefits from x86 optimizations in this crate.
+        let mut carry = 0u64;
+        for i in 0..N {
+            self.0[i] = mac_with_carry!(0u64, self.0[i], other, &mut carry);
         }
-        // Calculate the full 128-bit product of the lowest limb
-        let mut prod: u128 = (self.0[0] as u128) * (other as u128);
-        self.0[0] = prod as u64;
-        let mut carry = (prod >> 64) as u64;
-        // iterate through the remaining limbs
-        for i in 1..N {
-            // Calculate the full 128-bit product of the current limb and the u64 multiplier
-            prod = (self.0[i] as u128) * (other as u128) + (carry as u128);
-            self.0[i] = prod as u64;
-            carry = (prod >> 64) as u64;
-        }
+        // Overflow is ignored by contract; assert in debug to catch misuse.
         debug_assert!(carry == 0, "Overflow in BigInt::mul_u64_in_place");
     }
 
@@ -506,32 +493,23 @@ impl<const N: usize> BigInteger for BigInt<N> {
         // ensure NPLUS1 is the correct size
         debug_assert!(NPLUS1 == N + 1);
         // special cases for 0 and 1
-        if other == 0 || self.is_zero() {
-            return BigInt::<NPLUS1>::zero();
-        } else if other == 1 {
-            let mut res = BigInt::<NPLUS1>::zero();
-            for i in 0..N {
-                res.0[i] = self.0[i];
-            }
-            return res;
+        // if other == 0 || self.is_zero() {
+        //     return BigInt::<NPLUS1>::zero();
+        // } else if other == 1 {
+        //     let mut res = BigInt::<NPLUS1>::zero();
+        //     for i in 0..N {
+        //         res.0[i] = self.0[i];
+        //     }
+        //     return res;
+        // }
+        // Use the same multiply-accumulate primitive and capture the final carry
+        let mut res = BigInt::<NPLUS1>::zero();
+        let mut carry = 0u64;
+        for i in 0..N {
+            res.0[i] = mac_with_carry!(0u64, self.0[i], other, &mut carry);
         }
-        // initialize result
-        let mut res: [u64; NPLUS1] = [0u64; NPLUS1];
-        // Calculate the full 128-bit product of the lowest limb
-        let mut prod: u128 = (self.0[0] as u128) * (other as u128);
-        res[0] = prod as u64;
-        let mut carry = (prod >> 64) as u64;
-        // iterate through the remaining limbs
-        for i in 1..N {
-            // Calculate the full 128-bit product of the current limb and the u64 multiplier
-            prod = (self.0[i] as u128) * (other as u128) + (carry as u128);
-            res[i] = prod as u64;
-            carry = (prod >> 64) as u64;
-        }
-        // add final carry
-        res[N] = carry;
-        // and return
-        BigInt::<NPLUS1>(res)
+        res.0[N] = carry;
+        res
     }
 
     #[inline]
@@ -549,7 +527,7 @@ impl<const N: usize> BigInteger for BigInt<N> {
             for i in 0..N {
                 carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
             }
-            acc.0[N] += carry as u64;
+            acc.0[N] = acc.0[N].wrapping_add(carry as u64);
             return;
         }
         // otherwise fma
@@ -557,7 +535,50 @@ impl<const N: usize> BigInteger for BigInt<N> {
         for i in 0..N {
             acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other, &mut carry);
         }
-        acc.0[N] += carry as u64;
+        acc.0[N] = acc.0[N].wrapping_add(carry as u64);
+    }
+
+    #[inline]
+    #[unroll_for_loops(8)]
+    fn fm128a<const NPLUS2: usize>(&self, other: u128, acc: &mut BigInt<NPLUS2>) {
+        // ensure NPLUS2 is the correct size (N + 2 limbs)
+        debug_assert!(NPLUS2 == N + 2);
+        // special cases for 0 and 1
+        // if other == 0 || self.is_zero() {
+        //     // idempotent
+        //     return;
+        // } else if other == 1 {
+        //     // just addition into lower N limbs; propagate final carry into acc[N]
+        //     let mut carry = 0;
+        //     for i in 0..N {
+        //         carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
+        //     }
+        //     // carry is at most 1; fold into limb N (wrapping into highest limb if needed later)
+        //     acc.0[N] = acc.0[N].wrapping_add(carry as u64);
+        //     return;
+        // }
+
+        let other_lo = other as u64;
+        let other_hi = (other >> 64) as u64;
+
+        // Accumulate self * other_lo into acc[0..=N]
+        let mut carry = 0u64;
+        for i in 0..N {
+            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other_lo, &mut carry);
+        }
+        // Add final carry into limb N, propagating into highest limb if it overflows
+        let (new_n, of1) = acc.0[N].overflowing_add(carry);
+        acc.0[N] = new_n;
+        if of1 {
+            acc.0[N + 1] = acc.0[N + 1].wrapping_add(1);
+        }
+
+        // Accumulate self * other_hi into acc[1..=N+1]
+        let mut carry2 = 0u64;
+        for i in 0..N {
+            acc.0[i + 1] = mac_with_carry!(acc.0[i + 1], self.0[i], other_hi, &mut carry2);
+        }
+        acc.0[N + 1] = acc.0[N + 1].wrapping_add(carry2);
     }
 
     #[inline]
@@ -579,23 +600,26 @@ impl<const N: usize> BigInteger for BigInt<N> {
             }
             return res;
         }
-        // split other into two u64s
+        // Split other into two u64s and accumulate directly into the result buffer.
         let other_lo = other as u64;
         let other_hi = (other >> 64) as u64;
-        // two u64 multiplications with carry
-        let lo_part = self.mul_u64_w_carry::<NPLUS1>(other_lo);
-        let hi_part = self.mul_u64_w_carry::<NPLUS1>(other_hi);
-        // pad lo_part right by one limb (extra high zero limb)
-        // pad hi_part left by one limb (i.e. multiply by 2^64)
-        let mut lo_padded = BigInt::<NPLUS2>::zero();
-        let mut hi_padded = BigInt::<NPLUS2>::zero();
-        for i in 0..NPLUS1 {
-            lo_padded.0[i] = lo_part.0[i];
-            hi_padded.0[i + 1] = hi_part.0[i];
+
+        let mut res = BigInt::<NPLUS2>::zero();
+
+        // First pass: res[i] += self[i] * other_lo
+        let mut carry = 0u64;
+        for i in 0..N {
+            res.0[i] = mac_with_carry!(res.0[i], self.0[i], other_lo, &mut carry);
         }
-        // add the two padded parts
-        let (res, carry) = lo_padded.const_add_with_carry(&hi_padded);
-        debug_assert!(carry == false, "Overflow in BigInt::mul_u128_w_carry");
+        res.0[N] = carry;
+
+        // Second pass: res[i+1] += self[i] * other_hi
+        let mut carry2 = 0u64;
+        for i in 0..N {
+            res.0[i + 1] = mac_with_carry!(res.0[i + 1], self.0[i], other_hi, &mut carry2);
+        }
+        res.0[N + 1] = carry2;
+
         res
     }
 
@@ -1282,6 +1306,11 @@ pub trait BigInteger:
         &self,
         other: u128,
     ) -> BigInt<NPLUS2>;
+
+    /// NEW! Fused multiply-accumulate with a u128 multiplier.
+    /// Accumulate self * other into `acc`, which must have two extra limbs.
+    /// Overflow causes wraparound in the highest limb of the accumulator.
+    fn fm128a<const NPLUS2: usize>(&self, other: u128, acc: &mut BigInt<NPLUS2>);
 
     /// Multiplies this [`BigInteger`] by another `BigInteger`, storing the result in `self`.
     /// Overflow is ignored.
