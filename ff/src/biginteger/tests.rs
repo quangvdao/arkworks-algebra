@@ -279,3 +279,211 @@ fn test_biginteger832() {
     use crate::biginteger::BigInteger832 as B;
     test_biginteger(B::new([u64::MAX; 13]), B::new([0u64; 13]));
 }
+
+// Tests for NEW functions
+use crate::biginteger::BigInteger256;
+
+#[test]
+fn test_mul_u64_in_place() {
+    let mut a = BigInteger256::from(0x123456789ABCDEFu64);
+    let b = 0x987654321u64;
+    
+    // Test against reference implementation
+    let expected = BigUint::from(0x123456789ABCDEFu64) * BigUint::from(b);
+    a.mul_u64_in_place(b);
+    assert_eq!(BigUint::from(a), expected);
+    
+    // Test zero multiplication
+    let mut zero = BigInteger256::zero();
+    zero.mul_u64_in_place(12345);
+    assert!(zero.is_zero());
+    
+    // Test multiplication by zero
+    let mut a = BigInteger256::from(12345u64);
+    a.mul_u64_in_place(0);
+    assert!(a.is_zero());
+    
+    // Test multiplication by one
+    let orig = BigInteger256::from(0xDEADBEEFu64);
+    let mut a = orig;
+    a.mul_u64_in_place(1);
+    assert_eq!(a, orig);
+}
+
+#[test]
+fn test_mul_u64_w_carry() {
+    let a = BigInteger256::from(u64::MAX);
+    let b = u64::MAX;
+    
+    // Test against reference implementation
+    let expected = BigUint::from(u64::MAX) * BigUint::from(u64::MAX);
+    let result = a.mul_u64_w_carry::<5>(b);
+    assert_eq!(BigUint::from(result), expected);
+    
+    // Test with small numbers
+    let a = BigInteger256::from(12345u64);
+    let b = 67890u64;
+    let expected = BigUint::from(12345u64) * BigUint::from(67890u64);
+    let result = a.mul_u64_w_carry::<5>(b);
+    assert_eq!(BigUint::from(result), expected);
+    
+    // Test zero cases
+    let zero = BigInteger256::zero();
+    let result = zero.mul_u64_w_carry::<5>(12345);
+    assert!(result.is_zero());
+    
+    let a = BigInteger256::from(12345u64);
+    let result = a.mul_u64_w_carry::<5>(0);
+    assert!(result.is_zero());
+    
+    // Test multiplication by one
+    let a = BigInteger256::from(0xDEADBEEFu64);
+    let result = a.mul_u64_w_carry::<5>(1);
+    let expected_bytes = a.to_bytes_le();
+    let result_bytes = result.to_bytes_le();
+    assert_eq!(&result_bytes[..expected_bytes.len()], &expected_bytes[..]);
+}
+
+#[test]
+fn test_fmu64a() {
+    let a = BigInteger256::from(12345u64);
+    let b = 67890u64;
+    let mut acc = BigInteger256::from(11111u64).mul_u64_w_carry::<5>(1);
+    
+    // Perform fused multiply-accumulate
+    a.fmu64a(b, &mut acc);
+    
+    // Compare against separate multiply and add
+    let expected_mul = BigUint::from(12345u64) * BigUint::from(67890u64);
+    let expected_total = expected_mul + BigUint::from(11111u64);
+    assert_eq!(BigUint::from(acc), expected_total);
+    
+    // Test zero cases
+    let zero = BigInteger256::zero();
+    let mut acc = BigInteger256::from(12345u64).mul_u64_w_carry::<5>(1);
+    let acc_copy = acc;
+    zero.fmu64a(67890, &mut acc);
+    assert_eq!(acc, acc_copy); // Should be unchanged
+    
+    // Test multiplication by zero
+    let a = BigInteger256::from(12345u64);
+    let mut acc = BigInteger256::from(11111u64).mul_u64_w_carry::<5>(1);
+    let acc_copy = acc;
+    a.fmu64a(0, &mut acc);
+    assert_eq!(acc, acc_copy); // Should be unchanged
+    
+    // Test multiplication by one (should be just addition)
+    let a = BigInteger256::from(12345u64);
+    let mut acc = BigInteger256::from(11111u64).mul_u64_w_carry::<5>(1);
+    a.fmu64a(1, &mut acc);
+    let expected = BigUint::from(12345u64) + BigUint::from(11111u64);
+    assert_eq!(BigUint::from(acc), expected);
+}
+
+#[test]
+fn test_mul_u128_w_carry() {
+    let a = BigInteger256::from(0x123456789ABCDEFu64);
+    let b = 0x987654321DEADBEEFu128;
+    
+    // Test against reference implementation
+    let expected = BigUint::from(0x123456789ABCDEFu64) * BigUint::from(0x987654321DEADBEEFu128);
+    let result = a.mul_u128_w_carry::<5, 6>(b);
+    assert_eq!(BigUint::from(result), expected);
+    
+    // Test with u64 value (should be same as mul_u64_w_carry)
+    let b_u64 = 0x987654321u64;
+    let result_u128 = a.mul_u128_w_carry::<5, 6>(b_u64 as u128);
+    let result_u64 = a.mul_u64_w_carry::<5>(b_u64);
+    
+    // Compare first 5 limbs (u64 result size)
+    for i in 0..5 {
+        assert_eq!(result_u128.0[i], result_u64.0[i]);
+    }
+    assert_eq!(result_u128.0[5], 0); // Extra limb should be zero
+    
+    // Test zero cases
+    let zero = BigInteger256::zero();
+    let result = zero.mul_u128_w_carry::<5, 6>(12345);
+    assert!(result.is_zero());
+    
+    let a = BigInteger256::from(12345u64);
+    let result = a.mul_u128_w_carry::<5, 6>(0);
+    assert!(result.is_zero());
+    
+    // Test multiplication by one
+    let a = BigInteger256::from(0xDEADBEEFu64);
+    let result = a.mul_u128_w_carry::<5, 6>(1);
+    let expected_bytes = a.to_bytes_le();
+    let result_bytes = result.to_bytes_le();
+    assert_eq!(&result_bytes[..expected_bytes.len()], &expected_bytes[..]);
+}
+
+#[test]
+fn test_fm128a_basic_and_edges() {
+    use crate::biginteger::BigInteger256 as B;
+    // Basic reference check against BigUint
+    let a = B::from(0x123456789ABCDEFu64);
+    let b = 0x987654321DEADBEEFu128;
+    let mut acc = B::zero().mul_u128_w_carry::<5, 6>(1); // zero-extended accumulator (6 limbs)
+    a.fm128a::<6>(b, &mut acc);
+    let expected = num_bigint::BigUint::from(0x123456789ABCDEFu64)
+        * num_bigint::BigUint::from(0x987654321DEADBEEFu128);
+    assert_eq!(num_bigint::BigUint::from(acc), expected);
+
+    // Zero multiplier: no change
+    let a = B::from(12345u64);
+    let mut acc = B::from(11111u64).mul_u128_w_carry::<5, 6>(1);
+    let acc_copy = acc;
+    a.fm128a::<6>(0, &mut acc);
+    assert_eq!(acc, acc_copy);
+
+    // One multiplier: reduces to addition
+    let a = B::from(12345u64);
+    let mut acc = B::from(11111u64).mul_u128_w_carry::<5, 6>(1);
+    a.fm128a::<6>(1, &mut acc);
+    let expected = num_bigint::BigUint::from(12345u64) + num_bigint::BigUint::from(11111u64);
+    assert_eq!(num_bigint::BigUint::from(acc), expected);
+
+    // Overflow propagation from limb N into highest limb
+    let a = B::new([u64::MAX; 4]);
+    let mut acc = B::zero().mul_u128_w_carry::<5, 6>(1);
+    // Pre-fill limb N to force overflow when adding the final carry from low pass
+    acc.0[4] = u64::MAX; // limb N
+    acc.0[5] = 0; // highest limb
+    // cause carry=1 from low pass (a * 2)
+    a.fm128a::<6>(2, &mut acc);
+    // Expect highest limb incremented by 1 due to overflow from limb N
+    assert_eq!(acc.0[5], 1);
+}
+
+#[test]
+fn test_overflow_behavior_fmu64a() {
+    // Test that overflow in the highest limb wraps around as documented
+    let a = BigInteger256::new([u64::MAX; 4]);
+    let mut acc = BigInteger256::new([0, 0, 0, 0]).mul_u64_w_carry::<5>(1);
+    acc.0[4] = u64::MAX; // Set highest limb to max
+    
+    // This should cause overflow in the highest limb
+    a.fmu64a(2, &mut acc);
+    
+    // The overflow should wrap around
+    // u64::MAX * 2 = 2^65 - 2, which when added to u64::MAX = 2^65 + u64::MAX - 2
+    // This wraps to u64::MAX - 2 with a carry of 1 that itself wraps
+    assert_eq!(acc.0[4], u64::MAX.wrapping_add(1)); // Wrapped result
+}
+
+#[test]
+fn test_edge_cases_large_numbers() {
+    // Test with maximum values
+    let max_bi = BigInteger256::new([u64::MAX; 4]);
+    
+    // mul_u64_w_carry with max values
+    let result = max_bi.mul_u64_w_carry::<5>(u64::MAX);
+    let expected = BigUint::from(max_bi) * BigUint::from(u64::MAX);
+    assert_eq!(BigUint::from(result), expected);
+    
+    // mul_u128_w_carry with max values  
+    let result = max_bi.mul_u128_w_carry::<5, 6>(u128::MAX);
+    let expected = BigUint::from(max_bi) * BigUint::from(u128::MAX);
+    assert_eq!(BigUint::from(result), expected);
+}
