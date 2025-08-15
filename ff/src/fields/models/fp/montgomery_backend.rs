@@ -1,3 +1,4 @@
+
 use super::{Fp, FpConfig};
 use crate::{
     biginteger::arithmetic as fa, BigInt, BigInteger, PrimeField, SqrtPrecomputation, Zero,
@@ -1277,6 +1278,40 @@ fn barrett_cond_subtract<T: MontConfig<N>, const N: usize, const NPLUS1: usize>(
     }
 }
 
+/// Subtract two N+1 limb big integers where `a` is (u64, [u64; N]) and `b` is ([u64; N], u64).
+/// Returns the N+1 limb result as ([u64; N], u64) and a boolean indicating if a borrow occurred.
+#[unroll_for_loops(8)]
+#[inline(always)]
+fn sub_bigint_plus_one_prime<const N: usize>(
+    a: (u64, [u64; N]), // Format: (low_limb, high_n_limbs)
+    b: ([u64; N], u64), // Format: (low_n_limbs, high_limb)
+) -> (([u64; N], u64), bool) {
+    let (a_lo, a_hi_n) = a;
+    let (b_lo_n, b_hi) = b;
+    let mut result_lo_n = [0u64; N];
+    let mut borrow: u64 = 0;
+
+    // Subtract low limb: result_lo_n[0] = a_lo - b_lo_n[0] - borrow (initial borrow = 0)
+    result_lo_n[0] = a_lo; // Initialize result limb with a_lo
+    borrow = fa::sbb(&mut result_lo_n[0], b_lo_n[0], borrow); // result_lo_n[0] -= b_lo_n[0] + borrow
+
+    // Subtract middle limbs (if N > 1): result_lo_n[i] = a_hi_n[i-1] - b_lo_n[i] - borrow
+    // This loop covers indices i = 1 to N-1.
+    // It uses a_hi_n limbs from index 0 to N-2.
+    for i in 1..N {
+        result_lo_n[i] = a_hi_n[i - 1]; // Initialize result limb with corresponding a limb
+        borrow = fa::sbb(&mut result_lo_n[i], b_lo_n[i], borrow); // result_lo_n[i] -= b_lo_n[i] + borrow
+    }
+
+    // Subtract high limb: result_hi = a_hi_n[N-1] - b_hi - borrow
+    let mut result_hi = a_hi_n[N - 1]; // Initialize result limb with last a limb
+    borrow = fa::sbb(&mut result_hi, b_hi, borrow); // result_hi -= b_hi + borrow
+
+    let final_borrow_occurred = borrow != 0;
+
+    ((result_lo_n, result_hi), final_borrow_occurred)
+}
+
 /// Helper function to perform Barrett reduction from N+1 limbs to N limbs.
 /// Input `c` is represented as `(u64, [u64; N])` (to be compatible with outside invocations).
 /// Internally, it converts to `([u64; N], u64)` and operates in that format.
@@ -1308,13 +1343,24 @@ fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: us
     // Compute m * 2p (N+1 limbs)
     BigInt::mul_u64_in_place(&mut m2p, m);
 
-    // Compute r_tmp = c - m * 2p
+    // I really have no idea why the following sequence of operations
+    // is significantly faster than a simple BigInt sub operation.
+    // Compute r_tmp = c - m * 2p (result is ([u64; N], u64))
+    let m_times_2p = (
+        m2p.0[0..N].try_into().unwrap(), // Convert to ([u64; N], u64)
+        m2p.0[N] // High limb remains as u64
+    );
+    let (r_tmp, r_tmp_borrow) = sub_bigint_plus_one_prime((c.0[0], c.0[1..N+1].try_into().unwrap()), m_times_2p);
     // A borrow here implies c was smaller than m*2p, which shouldn't happen with correct m.
-    let (r_tmp, borrow) = c.const_sub_with_borrow(&m2p);
-    debug_assert!(!borrow, "Borrow should not occur in Barrett reduction");
-
+    debug_assert!(!r_tmp_borrow, "Borrow occurred calculating c - m*2p");
+    // Change formats again!
+    let r_tmp_bigint = nplus1_pair_high_to_bigint::<N, NPLUS1>(r_tmp);
+    // Alternative simple BigInt subtraction (much slower for some reason):
+    /*let (r_tmp_bigint, r_borrow) = c.const_sub_with_borrow(&m2p);
+    debug_assert!(!r_borrow, "Borrow occurred calculating c - m*2p");*/
+    
     // Use the optimized conditional subtraction to go from N+1 limbs to N limbs.
-    barrett_cond_subtract::<T, N, NPLUS1>(r_tmp)
+    barrett_cond_subtract::<T, N, NPLUS1>(r_tmp_bigint)
 }
 
 #[cfg(test)]
