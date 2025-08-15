@@ -868,6 +868,29 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         Self::new_unchecked(r2)
     }
 
+    /// Construct a new field element from a BigInt<NPLUS3> which is in
+    /// Montgomery form and should be reduced via two Barrett rounds then a final combine.
+    #[inline]
+    pub fn from_unchecked_nplus3<const NPLUS1: usize, const NPLUS2: usize, const NPLUS3: usize>(
+        element: BigInt<{ NPLUS3 }>,
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        debug_assert!(NPLUS2 == N + 2);
+        debug_assert!(NPLUS3 == N + 3);
+
+        // Reduce the upper N+2 limbs of `element` to N limbs
+        let c_hi = BigInt::<NPLUS2>(element.0[1..NPLUS3].try_into().unwrap());
+        let c_hi_hi = BigInt::<NPLUS1>(c_hi.0[1..NPLUS2].try_into().unwrap());
+        let r1 = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_hi_hi);
+        let c_hi_merged = nplus1_pair_low_to_bigint::<N, NPLUS1>((c_hi.0[0], r1.0));
+        let r_hi = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_hi_merged);
+
+        // Combine the original lowest limb with r_hi and perform final Barrett reduction
+        let c_final = nplus1_pair_low_to_bigint::<N, NPLUS1>((element.0[0], r_hi.0));
+        let r_final = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_final);
+        Self::new_unchecked(r_final)
+    }
+
     const fn const_is_zero(&self) -> bool {
         self.0.const_is_zero()
     }
@@ -943,6 +966,45 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         } else {
             res.const_subtract_modulus_with_carry(carry)
         }
+    }
+
+    /// Montgomery reduction for 2N-limb inputs (standard Montgomery reduction)
+    /// Takes a 2N-limb BigInt that represents a product in "unreduced" form
+    /// and reduces it to N limbs in Montgomery form.
+    #[inline(always)]
+    pub fn montgomery_reduce_2n<const TWON: usize>(input: BigInt<TWON>) -> Self {
+        debug_assert!(TWON == 2 * N);
+        // Work in-place over the owned 2N-limb buffer
+        let mut limbs = input.0;
+        let (lo, hi) = limbs.split_at_mut(N);
+
+        // Montgomery reduction - mirrors mul_without_cond_subtract
+        let mut carry2 = 0u64;
+        for i in 0..N {
+            let tmp = lo[i].wrapping_mul(T::INV);
+            let mut carry = 0u64;
+            fa::mac_discard(lo[i], tmp, T::MODULUS.0[0], &mut carry);
+            for j in 1..N {
+                let k = i + j;
+                if k >= N {
+                    hi[k - N] = fa::mac_with_carry(hi[k - N], tmp, T::MODULUS.0[j], &mut carry);
+                } else {
+                    lo[k] = fa::mac_with_carry(lo[k], tmp, T::MODULUS.0[j], &mut carry);
+                }
+            }
+            carry2 = fa::adc(&mut hi[i], carry, carry2);
+        }
+
+        // Move the high half into the output BigInt<N>
+        let mut hi_out = [0u64; N];
+        hi_out.copy_from_slice(hi);
+        let mut result = Self::new_unchecked(BigInt::<N>(hi_out));
+        if T::MODULUS_HAS_SPARE_BIT {
+            result.subtract_modulus();
+        } else {
+            result.subtract_modulus_with_carry(carry2 != 0);
+        }
+        result
     }
 
     #[inline(always)]
@@ -1369,11 +1431,12 @@ mod test {
 
     #[test]
     fn test_mont_macro_correctness() {
-        // This test succeeds **only** on the secp256k1 curve.
+        // This test succeeds only on the secp256k1 curve.
         let (is_positive, limbs) = str_to_limbs_u64(
             "111192936301596926984056301862066282284536849596023571352007112326586892541694",
         );
-        let t = Fr::from_sign_and_limbs(is_positive, &limbs);
+        // Use secp256k1::Fr here (do not use the bn254 alias `Fr` above).
+        let t = ark_test_curves::secp256k1::Fr::from_sign_and_limbs(is_positive, &limbs);
 
         let result: BigUint = t.into();
         let expected = BigUint::from_str(
