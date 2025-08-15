@@ -46,7 +46,8 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(a_s[i].mul_u64(b_u64_s[i]))
+            // bn254 Fr has N=4 limbs => N+1 = 5
+            criterion::black_box(a_s[i].mul_u64::<5>(b_u64_s[i]))
         })
     });
 
@@ -54,7 +55,7 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(a_s[i].mul_i64(b_i64_s[i]))
+            criterion::black_box(a_s[i].mul_i64::<5>(b_i64_s[i]))
         })
     });
 
@@ -64,7 +65,8 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(a_s[i].mul_u128(b_u128_s[i]))
+            // bn254 Fr has N=4 limbs => N+1 = 5, N+2 = 6
+            criterion::black_box(a_s[i].mul_u128::<5, 6>(b_u128_s[i]))
         })
     });
 
@@ -72,7 +74,7 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(a_s[i].mul_i128(b_i128_s[i]))
+            criterion::black_box(a_s[i].mul_i128::<5, 6>(b_i128_s[i]))
         })
     });
 
@@ -90,7 +92,7 @@ fn mul_small_bench(c: &mut Criterion) {
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
             // Call mul_u128 but provide a u64 input cast to u128
-            criterion::black_box(a_s[i].mul_u128(b_u64_as_u128_s[i]))
+            criterion::black_box(a_s[i].mul_u128::<5, 6>(b_u64_as_u128_s[i]))
         })
     });
 
@@ -102,7 +104,7 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(a_s[i].mul_u128_aux(b_u128_s[i]))
+            criterion::black_box(a_s[i].mul_u128_aux::<5, 6>(b_u128_s[i]))
         })
     });
 
