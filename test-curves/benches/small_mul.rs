@@ -1,10 +1,16 @@
+// This bench prefers bn254; if not enabled, provide a no-op main
+#[cfg(feature = "bn254")]
 use ark_ff::UniformRand;
+#[cfg(feature = "bn254")]
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
-use ark_test_curves::bn254::{Fr, FrConfig};
+#[cfg(feature = "bn254")]
+use ark_test_curves::bn254::Fr;
+#[cfg(feature = "bn254")]
 use criterion::{criterion_group, criterion_main, Criterion};
 
 // Hack: copy over the helper functions from the Montgomery backend to be benched
 
+#[cfg(feature = "bn254")]
 fn mul_small_bench(c: &mut Criterion) {
     const SAMPLES: usize = 1000;
     // Use a fixed seed for reproducibility
@@ -13,7 +19,7 @@ fn mul_small_bench(c: &mut Criterion) {
     let a_s = (0..SAMPLES)
         .map(|_| Fr::rand(&mut rng))
         .collect::<Vec<_>>();
-    let a_limbs_s = a_s.iter().map(|a| a.0.0).collect::<Vec<_>>();
+    // let a_limbs_s = a_s.iter().map(|a| a.0.0).collect::<Vec<_>>();
 
     let b_u64_s = (0..SAMPLES)
         .map(|_| rng.gen::<u64>())
@@ -86,7 +92,49 @@ fn mul_small_bench(c: &mut Criterion) {
         })
     });
 
-    // Benchmark mul_u128 specifically with inputs known to fit in u64
+    // Bench specialized trailing-zero RHS fastpaths (K = 1, 2)
+    // Construct b' with K trailing zeros in limbs for K=1 and K=2
+    let mut b_k1 = b_fr_s.clone();
+    for b in &mut b_k1 { (b.0).0[0] = 0; }
+    let mut b_k2 = b_fr_s.clone();
+    for b in &mut b_k2 { (b.0).0[0] = 0; (b.0).0[1] = 0; }
+
+    group.bench_function("mul_assign_rhs_trailing_zeros::<1>", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            let mut x = a_s[i];
+            x.mul_assign_rhs_trailing_zeros::<1>(&b_k1[i]);
+            criterion::black_box(x)
+        })
+    });
+
+    group.bench_function("mul_assign_rhs_trailing_zeros::<2>", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            let mut x = a_s[i];
+            x.mul_assign_rhs_trailing_zeros::<2>(&b_k2[i]);
+            criterion::black_box(x)
+        })
+    });
+
+    group.bench_function("mul_rhs_trailing_zeros::<1>", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(a_s[i].mul_rhs_trailing_zeros::<1>(&b_k1[i]))
+        })
+    });
+
+    group.bench_function("mul_rhs_trailing_zeros::<2>", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(a_s[i].mul_rhs_trailing_zeros::<2>(&b_k2[i]))
+        })
+    });
+
     group.bench_function("mul_u128 (u64 inputs)", |bench| {
         let mut i = 0;
         bench.iter(|| {
@@ -119,5 +167,10 @@ fn mul_small_bench(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "bn254")]
 criterion_group!(benches, mul_small_bench);
-criterion_main!(benches); 
+#[cfg(feature = "bn254")]
+criterion_main!(benches);
+
+#[cfg(not(feature = "bn254"))]
+fn main() {}
