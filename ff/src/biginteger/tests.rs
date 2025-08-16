@@ -487,3 +487,113 @@ fn test_edge_cases_large_numbers() {
     let expected = BigUint::from(max_bi) * BigUint::from(u128::MAX);
     assert_eq!(BigUint::from(result), expected);
 }
+
+#[test]
+fn test_fmu64a_into_nplus4_correctness_and_edges() {
+    use crate::biginteger::{BigInt, BigInteger256 as B};
+    let a = B::from(0xDEADBEEFCAFEBABEu64);
+    let other = 0xFEDCBA9876543210u64;
+    let mut acc = BigInt::<8>::zero(); // N+4 accumulator for N=4
+
+    // Reference: (a * other + acc_before) mod 2^(64*(N+4))
+    let before = BigUint::from(acc.clone());
+    a.fmu64a_into_nplus4::<8>(other, &mut acc);
+    let mut expected = BigUint::from(a);
+    expected *= BigUint::from(other);
+    expected += before;
+    let modulus = BigUint::from(1u8) << (64 * 8);
+    expected %= &modulus;
+    assert_eq!(BigUint::from(acc.clone()), expected);
+
+    // Zero multiplier is no-op
+    let mut acc2 = acc.clone();
+    a.fmu64a_into_nplus4::<8>(0, &mut acc2);
+    assert_eq!(acc2, acc);
+
+    // One multiplier reduces to addition
+    let mut acc3 = BigInt::<8>::zero();
+    acc3.0[0] = 11111;
+    let before3 = BigUint::from(acc3.clone());
+    a.fmu64a_into_nplus4::<8>(1, &mut acc3);
+    let mut expected3 = BigUint::from(a);
+    expected3 += before3;
+    expected3 %= &modulus;
+    assert_eq!(BigUint::from(acc3), expected3);
+
+    // Force cascading carry across N..=N+3
+    let a = B::new([u64::MAX; 4]);
+    let mut acc4 = BigInt::<8>::zero();
+    acc4.0[4] = u64::MAX; // limb N
+    acc4.0[5] = u64::MAX; // limb N+1
+    acc4.0[6] = u64::MAX; // limb N+2
+    acc4.0[7] = 0;        // limb N+3 (top)
+    // Use multiplier 2 so the low pass produces a carry=1
+    a.fmu64a_into_nplus4::<8>(2, &mut acc4);
+    assert_eq!(acc4.0[7], 1);
+}
+
+#[test]
+fn test_fm2x64a_into_nplus4_correctness() {
+    use crate::biginteger::{BigInt, BigInteger256 as B};
+    let a = B::from(0x1234567890ABCDEFu64);
+    let other = [0x0FEDCBA987654321u64, 0x0011223344556677u64];
+    let mut acc = BigInt::<8>::zero();
+
+    let before = BigUint::from(acc.clone());
+    a.fm2x64a_into_nplus4::<8>(other, &mut acc);
+
+    // Expected: a * (lo + (hi << 64)) + acc_before mod 2^(64*8)
+    let hi = BigUint::from(other[1]);
+    let lo = BigUint::from(other[0]);
+    let factor = (hi << 64) + lo;
+    let mut expected = BigUint::from(a);
+    expected *= factor;
+    expected += before;
+    let modulus = BigUint::from(1u8) << (64 * 8);
+    expected %= &modulus;
+    assert_eq!(BigUint::from(acc.clone()), expected);
+
+    // Zero limbs are no-op
+    let mut acc2 = acc.clone();
+    a.fm2x64a_into_nplus4::<8>([0, 0], &mut acc2);
+    assert_eq!(acc2, acc);
+}
+
+#[test]
+fn test_fm3x64a_into_nplus4_correctness() {
+    use crate::biginteger::{BigInt, BigInteger256 as B};
+    let a = B::from(0x0F0E0D0C0B0A0908u64);
+    let other = [0x89ABCDEF01234567u64, 0x76543210FEDCBA98u64, 0x1122334455667788u64];
+    let mut acc = BigInt::<8>::zero();
+
+    let before = BigUint::from(acc.clone());
+    a.fm3x64a_into_nplus4::<8>(other, &mut acc);
+
+    // Expected: a * (o0 + (o1<<64) + (o2<<128)) + acc_before mod 2^(64*8)
+    let term0 = BigUint::from(other[0]);
+    let term1 = BigUint::from(other[1]) << 64;
+    let term2 = BigUint::from(other[2]) << 128;
+    let factor = term0 + term1 + term2;
+    let mut expected = BigUint::from(a);
+    expected *= factor;
+    expected += before;
+    let modulus = BigUint::from(1u8) << (64 * 8);
+    expected %= &modulus;
+    assert_eq!(BigUint::from(acc.clone()), expected);
+
+    // Edge: ensure offset accumulation lands in correct limbs
+    // Fill acc with a pattern, then accumulate using only the highest limb to ensure writes start at index 2
+    let a = B::from(3u64);
+    let mut acc2 = BigInt::<8>::zero();
+    acc2.0[0] = 5;
+    acc2.0[1] = 7;
+    let other2 = [0, 0, 2]; // Only offset by 2 limbs
+    let before2 = BigUint::from(acc2.clone());
+    a.fm3x64a_into_nplus4::<8>(other2, &mut acc2);
+    let mut expected2 = BigUint::from(a);
+    expected2 *= BigUint::from(2u64) << 128;
+    expected2 += before2;
+    let modulus = BigUint::from(1u8) << (64 * 8);
+    expected2 %= &modulus;
+    assert_eq!(BigUint::from(acc2), expected2);
+}
