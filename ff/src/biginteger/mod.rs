@@ -344,6 +344,24 @@ impl<const N: usize> BigInt<N> {
         res
     }
 
+    /// Fused multiply-add with truncation: acc += self * other, fitting into P limbs; overflow is ignored.
+    /// This is a generic version for arbitrary limb widths of `self` and `other`.
+    #[inline]
+    pub fn fmadd_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>, acc: &mut BigInt<P>) {
+        let i_limit = core::cmp::min(N, P);
+        for i in 0..i_limit {
+            let mut carry = 0u64;
+            let j_limit = core::cmp::min(M, P - i);
+            for j in 0..j_limit {
+                acc.0[i + j] = mac_with_carry!(acc.0[i + j], self.0[i], other.0[j], &mut carry);
+            }
+            if i + j_limit < P {
+                let (new_val, _of) = acc.0[i + j_limit].overflowing_add(carry);
+                acc.0[i + j_limit] = new_val;
+            }
+        }
+    }
+
     #[inline]
     pub(crate) const fn const_sub_with_borrow(mut self, other: &Self) -> (Self, bool) {
         let mut borrow = 0;
