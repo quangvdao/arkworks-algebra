@@ -1,4 +1,7 @@
-use crate::{biginteger::BigInteger, UniformRand};
+#[cfg(test)]
+pub mod tests {
+
+use crate::{biginteger::{BigInteger, SignedBigInt}, UniformRand};
 use num_bigint::BigUint;
 
 // Test elementary math operations for BigInteger.
@@ -596,4 +599,141 @@ fn test_fm3x64a_into_nplus4_correctness() {
     let modulus = BigUint::from(1u8) << (64 * 8);
     expected2 %= &modulus;
     assert_eq!(BigUint::from(acc2), expected2);
+}
+
+// ==============================
+// SignedBigInt tests
+// ==============================
+
+#[test]
+fn test_signed_construction() {
+    // zero and one
+    let z = SignedBigInt::<1>::zero();
+    assert!(z.is_zero());
+    assert!(z.is_positive);
+    let o = SignedBigInt::<1>::one();
+    assert!(!o.is_zero());
+    assert!(o.is_positive);
+
+    // from_u64
+    let p = SignedBigInt::<1>::from_u64(42);
+    assert_eq!(p.magnitude.0[0], 42);
+    assert!(p.is_positive);
+    let n = SignedBigInt::<1>::from((42u64, false));
+    assert_eq!(n.magnitude.0[0], 42);
+    assert!(!n.is_positive);
+}
+
+#[test]
+fn test_signed_add_sub_mul_neg() {
+    let a = SignedBigInt::<1>::from_u64(10);
+    let b = SignedBigInt::<1>::from_u64(5);
+    assert_eq!((a + b).magnitude.0[0], 15);
+    assert_eq!((a - b).magnitude.0[0], 5);
+    assert_eq!((a * b).magnitude.0[0], 50);
+    let neg = -a;
+    assert_eq!(neg.magnitude.0[0], 10);
+    assert!(!neg.is_positive);
+
+    // opposite signs
+    let x = SignedBigInt::<1>::from_u64(30);
+    let y = SignedBigInt::<1>::from((20u64, false));
+    let r = x + y; // 30 - 20
+    assert!(r.is_positive);
+    assert_eq!(r.magnitude.0[0], 10);
+
+    let x2 = SignedBigInt::<1>::from((20u64, false));
+    let y2 = SignedBigInt::<1>::from_u64(30);
+    let r2 = x2 + y2; // -20 + 30
+    assert!(r2.is_positive);
+    assert_eq!(r2.magnitude.0[0], 10);
+}
+
+#[test]
+fn test_signed_to_i128_and_mag_helpers() {
+    let p = SignedBigInt::<1>::from_u64(100);
+    assert_eq!(p.to_i128(), 100);
+    let n = SignedBigInt::<1>::from((100u64, false));
+    assert_eq!(n.to_i128(), -100);
+
+    let d = SignedBigInt::<2>::from_u128(0x1234_5678_9abc_def0_1111_2222_3333_4444u128);
+    assert_eq!(d.magnitude.0[0], 0x1111_2222_3333_4444);
+    assert_eq!(d.magnitude.0[1], 0x1234_5678_9abc_def0);
+    // Positive below 2^127 should convert
+    let expected_i128 = 0x1234_5678_9abc_def0_1111_2222_3333_4444u128 as i128;
+    assert_eq!(d.to_i128(), Some(expected_i128));
+
+    // Positive at 2^127 should fail
+    let too_big_pos = SignedBigInt::<2>::from_u128(1u128 << 127);
+    assert_eq!(too_big_pos.to_i128(), None);
+
+    let small = SignedBigInt::<2>::new([100, 0], true);
+    assert_eq!(small.to_i128(), Some(100));
+    assert_eq!(small.magnitude_as_u128(), 100u128);
+}
+
+#[test]
+fn test_add_with_sign_u64_helper() {
+    let (mag, sign) = crate::biginteger::signed::add_with_sign_u64(10, true, 5, true);
+    assert_eq!(mag, 15);
+    assert!(sign);
+    let (mag2, sign2) = crate::biginteger::signed::add_with_sign_u64(10, true, 5, false);
+    assert_eq!(mag2, 5);
+    assert!(sign2);
+    let (mag3, sign3) = crate::biginteger::signed::add_with_sign_u64(5, true, 10, false);
+    assert_eq!(mag3, 5);
+    assert!(!sign3);
+}
+
+#[test]
+fn test_signed_truncated_add_sub() {
+    use crate::biginteger::SignedBigInt as S;
+    let a = S::<2>::from_u128(0x0000_0000_0000_0001_ffff_ffff_ffff_ffff);
+    let b = S::<2>::from_u128(0x0000_0000_0000_0001_0000_0000_0000_0001);
+    // Add and truncate to 1 limb
+    let r1 = a.add_trunc::<1>(&b);
+    // expected low limb wrap of the low words, ignoring carry to limb1
+    let expected_low = (0xffff_ffff_ffff_ffffu64).wrapping_add(0x0000_0000_0000_0001u64);
+    assert_eq!(r1.magnitude.0[0], expected_low);
+    assert!(r1.is_positive);
+
+    // Different signs: subtraction path
+    let a = S::<2>::from_u128(0x2);
+    let b = S::<2>::from(-3i128); // -3
+    let r2 = a.add_trunc::<1>(&b); // 2 + (-3) = -1, truncated to 64-bit
+    assert_eq!(r2.magnitude.0[0], 1);
+    assert!(!r2.is_positive);
+
+    // sub_trunc uses add_trunc internally
+    let x = S::<1>::from_u64(10);
+    let y = S::<1>::from_u64(7);
+    let r3 = x.sub_trunc::<1>(&y);
+    assert_eq!(r3.magnitude.0[0], 3);
+    assert!(r3.is_positive);
+}
+
+#[test]
+fn test_signed_truncated_mul_and_fmadd() {
+    use crate::biginteger::SignedBigInt as S;
+    // 128-bit x 64-bit -> truncated to 2 limbs (128-bit)
+    let a = S::<2>::from_u128(0x0000_0000_0000_0001_FFFF_FFFF_FFFF_FFFFu128);
+    let b = S::<1>::from_u64(0x2);
+    let p = a.mul_trunc::<1, 2>(&b);
+    // Expected low 128 bits of the product
+    let expected = num_bigint::BigUint::from(0x0000_0000_0000_0001_FFFF_FFFF_FFFF_FFFFu128)
+        * num_bigint::BigUint::from(2u64);
+    let got = num_bigint::BigUint::from(p.magnitude);
+    assert_eq!(got, expected & ((num_bigint::BigUint::from(1u8) << 128) - 1u8));
+    assert!(p.is_positive);
+
+    // fmadd into 1-limb accumulator (truncate to 64 bits)
+    let a = S::<1>::from_u64(0xFFFF_FFFF_FFFF_FFFF);
+    let b = S::<1>::from_u64(0x2);
+    let mut acc = S::<1>::from_u64(1);
+    a.fmadd_trunc::<1, 1>(&b, &mut acc); // acc = 1 + (a*b) mod 2^64 with sign +
+    // a*b = (2^64 - 1)*2 = 2^65 - 2 => low 64 = (2^64 - 2)
+    let expected_low = (u64::MAX).wrapping_sub(1);
+    assert_eq!(acc.magnitude.0[0], expected_low.wrapping_add(1));
+}
+
 }
