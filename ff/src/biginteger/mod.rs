@@ -29,6 +29,9 @@ use zeroize::Zeroize;
 #[macro_use]
 pub mod arithmetic;
 
+pub mod signed;
+pub use signed::SignedBigInt;
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 #[must_use]
 pub struct BigInt<const N: usize>(pub [u64; N]);
@@ -320,6 +323,25 @@ impl<const N: usize> BigInt<N> {
     pub const fn num_spare_bits(self) -> u32 {
         // Fast path: directly use the intrinsic on the most significant limb
         self.0[N - 1].leading_zeros()
+    }
+
+    /// Truncated-width multiplication: compute self * other and fit into P limbs; overflow is ignored.
+    #[inline]
+    pub fn mul_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
+        let mut res = BigInt::<P>::zero();
+        let i_limit = core::cmp::min(N, P);
+        for i in 0..i_limit {
+            let mut carry = 0u64;
+            let j_limit = core::cmp::min(M, P - i);
+            for j in 0..j_limit {
+                res.0[i + j] = mac_with_carry!(res.0[i + j], self.0[i], other.0[j], &mut carry);
+            }
+            if i + j_limit < P {
+                let (new_val, _of) = res.0[i + j_limit].overflowing_add(carry);
+                res.0[i + j_limit] = new_val;
+            }
+        }
+        res
     }
 
     #[inline]
