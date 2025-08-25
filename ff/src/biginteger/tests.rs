@@ -740,4 +740,178 @@ fn test_signed_truncated_mul_and_fmadd() {
     assert_eq!(acc.magnitude.0[0], expected_low.wrapping_add(1));
 }
 
+#[test]
+fn test_signed_truncated_add_sub_mixed() {
+    use crate::biginteger::SignedBigInt as S;
+    // Same sign, different widths, ensure carry handling and sign preservation
+    let a = S::<2>::from_u128(0x0000_0000_0000_0002_FFFF_FFFF_FFFF_FFFF);
+    let b = S::<1>::from_u64(0x0000_0000_0000_0002);
+    let r = a.add_trunc_mixed::<1, 2>(&b); // 128-bit result
+    let expected = num_bigint::BigUint::from(0x0000_0000_0000_0002_FFFF_FFFF_FFFF_FFFFu128)
+        + num_bigint::BigUint::from(2u64);
+    assert_eq!(num_bigint::BigUint::from(r.magnitude), expected);
+    assert!(r.is_positive);
+
+    // Different signs, |a| > |b|: result sign should be sign(a)
+    let a2 = S::<2>::from_u128(5000);
+    let b2 = S::<1>::from((3000u64, false)); // -3000
+    let r2 = a2.add_trunc_mixed::<1, 2>(&b2);
+    assert!(r2.is_positive);
+    assert_eq!(r2.magnitude.0[0], 2000);
+
+    // Different signs, |b| > |a|: result sign should be sign(b)
+    let a3 = S::<2>::from_u128(1000);
+    let b3 = S::<1>::from((3000u64, false)); // -3000
+    let r3 = a3.add_trunc_mixed::<1, 2>(&b3);
+    assert!(!r3.is_positive);
+    assert_eq!(r3.magnitude.0[0], 2000);
+
+    // sub_trunc_mixed basic checks
+    let a4 = S::<2>::from_u128(10000);
+    let b4 = S::<1>::from_u64(9999);
+    let r4 = a4.sub_trunc_mixed::<1, 2>(&b4);
+    assert!(r4.is_positive);
+    assert_eq!(r4.magnitude.0[0], 1);
+
+    let a5 = S::<2>::from_u128(1000);
+    let b5 = S::<1>::from_u64(5000);
+    let r5 = a5.sub_trunc_mixed::<1, 2>(&b5);
+    assert!(!r5.is_positive);
+    assert_eq!(r5.magnitude.0[0], 4000);
+}
+
+#[test]
+fn test_signed_fmadd_trunc_mixed_width_and_signs() {
+    use crate::biginteger::SignedBigInt as S;
+    // Case 1: same sign => pure addition of magnitudes
+    let a = S::<2>::from_u128(30000);
+    let b = S::<1>::from_u64(7);
+    let mut acc = S::<2>::from_u128(1000000);
+    a.fmadd_trunc::<1, 2>(&b, &mut acc); // acc += 210000
+    assert!(acc.is_positive);
+    assert_eq!(acc.magnitude.0[0] as u128 + ((acc.magnitude.0[1] as u128) << 64), 1210000u128);
+
+    // Case 2: different sign, |prod| < |acc| => sign preserved
+    let a2 = S::<2>::from_u128(30000);
+    let b2 = S::<1>::from((7u64, false)); // -7
+    let mut acc2 = S::<2>::from_u128(1000000);
+    a2.fmadd_trunc::<1, 2>(&b2, &mut acc2); // acc2 -= 210000 => 790000
+    assert!(acc2.is_positive);
+    assert_eq!(acc2.magnitude.0[0] as u128 + ((acc2.magnitude.0[1] as u128) << 64), 790000u128);
+
+    // Case 3: different sign, |prod| > |acc| => sign flips to prod_sign
+    let a3 = S::<2>::from_u128(300);
+    let b3 = S::<1>::from((7u64, false)); // -7 => prod = -2100
+    let mut acc3 = S::<2>::from_u128(1000);
+    a3.fmadd_trunc::<1, 2>(&b3, &mut acc3); // 1000 - 2100 = -1100
+    assert!(!acc3.is_positive);
+    assert_eq!(acc3.magnitude.0[0], 1100);
+}
+
+#[test]
+fn test_prop_add_sub_trunc_mixed_random() {
+    use crate::biginteger::SignedBigInt as S;
+    use ark_std::rand::Rng;
+    let mut rng = ark_std::test_rng();
+
+    // Helper to validate a single pair for given consts
+    macro_rules! run_case {
+        ($n:expr, $m:expr, $p:expr, $iters:expr) => {{
+            for _ in 0..$iters {
+                let a_mag: crate::biginteger::BigInt<$n> = UniformRand::rand(&mut rng);
+                let b_mag: crate::biginteger::BigInt<$m> = UniformRand::rand(&mut rng);
+                let a_pos = (rng.gen::<u8>() & 1) == 1;
+                let b_pos = (rng.gen::<u8>() & 1) == 1;
+                let a = S::<$n>::from_bigint(a_mag, a_pos);
+                let b = S::<$m>::from_bigint(b_mag, b_pos);
+
+                // add_trunc_mixed
+                let r_add = a.add_trunc_mixed::<$m, $p>(&b);
+                let a_bu = num_bigint::BigUint::from(a.magnitude);
+                let b_bu = num_bigint::BigUint::from(b.magnitude);
+                let (exp_add_mag, exp_add_pos) = if a_pos == b_pos {
+                    (&a_bu + &b_bu, a_pos)
+                } else if a_bu >= b_bu {
+                    (&a_bu - &b_bu, a_pos)
+                } else {
+                    (&b_bu - &a_bu, b_pos)
+                };
+                let modulus = num_bigint::BigUint::from(1u8) << (64 * $p);
+                let exp_add_mag_mod = exp_add_mag % &modulus;
+                assert_eq!(num_bigint::BigUint::from(r_add.magnitude), exp_add_mag_mod);
+                if exp_add_mag_mod != num_bigint::BigUint::from(0u8) {
+                    assert_eq!(r_add.is_positive, exp_add_pos);
+                }
+
+                // sub_trunc_mixed: a - b
+                let r_sub = a.sub_trunc_mixed::<$m, $p>(&b);
+                let (exp_sub_mag, exp_sub_pos) = if a_pos != b_pos {
+                    (&a_bu + &b_bu, a_pos)
+                } else if a_bu >= b_bu {
+                    (&a_bu - &b_bu, a_pos)
+                } else {
+                    (&b_bu - &a_bu, !a_pos)
+                };
+                let exp_sub_mag_mod = exp_sub_mag % &modulus;
+                assert_eq!(num_bigint::BigUint::from(r_sub.magnitude), exp_sub_mag_mod);
+                if exp_sub_mag_mod != num_bigint::BigUint::from(0u8) {
+                    assert_eq!(r_sub.is_positive, exp_sub_pos);
+                }
+            }
+        }};
+    }
+
+    run_case!(2, 3, 2, 200);
+    run_case!(3, 1, 2, 200);
+    run_case!(1, 2, 1, 200);
+}
+
+#[test]
+fn test_prop_fmadd_trunc_random() {
+    use crate::biginteger::SignedBigInt as S;
+    use ark_std::rand::Rng;
+    let mut rng = ark_std::test_rng();
+
+    macro_rules! run_case {
+        ($n:expr, $m:expr, $p:expr, $iters:expr) => {{
+            for _ in 0..$iters {
+                let a_mag: crate::biginteger::BigInt<$n> = UniformRand::rand(&mut rng);
+                let b_mag: crate::biginteger::BigInt<$m> = UniformRand::rand(&mut rng);
+                let acc_mag: crate::biginteger::BigInt<$p> = UniformRand::rand(&mut rng);
+                let a_pos = (rng.gen::<u8>() & 1) == 1;
+                let b_pos = (rng.gen::<u8>() & 1) == 1;
+                let acc_pos = (rng.gen::<u8>() & 1) == 1;
+                let a = S::<$n>::from_bigint(a_mag, a_pos);
+                let b = S::<$m>::from_bigint(b_mag, b_pos);
+                let mut acc = S::<$p>::from_bigint(acc_mag, acc_pos);
+
+                // expected via BigUint with truncation of the product BEFORE combining signs
+                let a_bu = num_bigint::BigUint::from(a.magnitude);
+                let b_bu = num_bigint::BigUint::from(b.magnitude);
+                let acc_bu = num_bigint::BigUint::from(acc.magnitude);
+                let modulus = num_bigint::BigUint::from(1u8) << (64 * $p);
+                let prod_mod = (&a_bu * &b_bu) % &modulus;
+                let prod_pos = a_pos == b_pos;
+                let (exp_mag_mod, exp_pos) = if acc_pos == prod_pos {
+                    ((acc_bu + &prod_mod) % &modulus, acc_pos)
+                } else if acc_bu >= prod_mod {
+                    (acc_bu - &prod_mod, acc_pos)
+                } else {
+                    (prod_mod - &acc_bu, prod_pos)
+                };
+
+                a.fmadd_trunc::<$m, $p>(&b, &mut acc);
+
+                assert_eq!(num_bigint::BigUint::from(acc.magnitude), exp_mag_mod);
+                if exp_mag_mod != num_bigint::BigUint::from(0u8) {
+                    assert_eq!(acc.is_positive, exp_pos);
+                }
+            }
+        }};
+    }
+
+    run_case!(2, 1, 2, 200);
+    run_case!(3, 2, 2, 200);
+}
+
 }

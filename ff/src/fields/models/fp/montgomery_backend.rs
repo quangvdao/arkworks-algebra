@@ -882,10 +882,9 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// NEW! Construct a new field element from a BigInt<NPLUS1>
     /// which is in montgomery form and just needs to be reduced
     /// via a barrett reduction.
-    #[inline]
+    #[inline(always)]
     pub fn from_unchecked_nplus1<const NPLUS1: usize>(element: BigInt<{ NPLUS1 }>) -> Self {
         debug_assert!(NPLUS1 == N + 1);
-        // Barrett reduction
         let r = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(element);
         Self::new_unchecked(r)
     }
@@ -907,29 +906,6 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         Self::new_unchecked(r2)
     }
 
-    /// Construct a new field element from a BigInt<NPLUS3> which is in
-    /// Montgomery form and should be reduced via two Barrett rounds then a final combine.
-    #[inline]
-    pub fn from_unchecked_nplus3<const NPLUS1: usize, const NPLUS2: usize, const NPLUS3: usize>(
-        element: BigInt<{ NPLUS3 }>,
-    ) -> Self {
-        debug_assert!(NPLUS1 == N + 1);
-        debug_assert!(NPLUS2 == N + 2);
-        debug_assert!(NPLUS3 == N + 3);
-
-        // Reduce the upper N+2 limbs of `element` to N limbs
-        let c_hi = BigInt::<NPLUS2>(element.0[1..NPLUS3].try_into().unwrap());
-        let c_hi_hi = BigInt::<NPLUS1>(c_hi.0[1..NPLUS2].try_into().unwrap());
-        let r1 = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_hi_hi);
-        let c_hi_merged = nplus1_pair_low_to_bigint::<N, NPLUS1>((c_hi.0[0], r1.0));
-        let r_hi = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_hi_merged);
-
-        // Combine the original lowest limb with r_hi and perform final Barrett reduction
-        let c_final = nplus1_pair_low_to_bigint::<N, NPLUS1>((element.0[0], r_hi.0));
-        let r_final = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c_final);
-        Self::new_unchecked(r_final)
-    }
-
     const fn const_is_zero(&self) -> bool {
         self.0.const_is_zero()
     }
@@ -944,9 +920,8 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     }
 
     /// Interpret a set of limbs (along with a sign) as a field element.
-    /// For *internal* use only; please use the `ark_ff::MontFp` macro instead
-    /// of this method
-    #[doc(hidden)]
+    /// The input limbs are interpreted little-endian. For public use; prefer
+    /// the `ark_ff::MontFp` macro for constant contexts.
     pub const fn from_sign_and_limbs(is_positive: bool, limbs: &[u64]) -> Self {
         let mut repr = BigInt([0; N]);
         assert!(limbs.len() <= N);
@@ -1305,6 +1280,118 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     const fn sub_with_borrow(a: &BigInt<N>, b: &BigInt<N>) -> BigInt<N> {
         a.const_sub_with_borrow(b).0
     }
+
+    /// Helper function: multiply a BigInt<N> by u64 and accumulate into BigInt<NPLUS1>
+    /// This avoids creating temporary BigInt<NPLUS1> objects.
+    #[inline(always)]
+    #[unroll_for_loops(8)]
+    fn mul_u64_accumulate<const NPLUS1: usize>(
+        acc: &mut BigInt<NPLUS1>, 
+        a: &BigInt<N>, 
+        b: u64
+    ) {
+        debug_assert!(NPLUS1 == N + 1);
+        use crate::biginteger::arithmetic as fa;
+        
+        let mut carry = 0u64;
+        for i in 0..N {
+            acc.0[i] = fa::mac_with_carry(acc.0[i], a.0[i], b, &mut carry);
+        }
+        
+        // Add final carry to the high limb
+        let final_carry = fa::adc(&mut acc.0[N], carry, 0);
+        debug_assert!(final_carry == 0, "overflow in mul_u64_accumulate");
+    }
+
+    /// Compute a linear combination of field elements with u64 coefficients.
+    /// Performs unreduced accumulation in BigInt<NPLUS1>, then one final reduction.
+    /// This is more efficient than individual multiplications and additions.
+    #[inline(always)]
+    pub fn linear_combination_u64<const NPLUS1: usize>(
+        pairs: &[(Self, u64)]
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        debug_assert!(!pairs.is_empty(), "linear_combination_u64 requires at least one pair");
+        
+        // Start with first term
+        let mut acc = pairs[0].0.0.mul_u64_w_carry::<NPLUS1>(pairs[0].1);
+        
+        // Accumulate remaining terms using multiply-accumulate to avoid temporaries
+        for (a, b) in &pairs[1..] {
+            Self::mul_u64_accumulate::<NPLUS1>(&mut acc, &a.0, *b);
+        }
+        
+        Self::from_unchecked_nplus1::<NPLUS1>(acc)
+    }
+
+    /// Compute a linear combination with separate positive and negative terms.
+    /// Each term is multiplied by a u64 coefficient, then positive and negative
+    /// sums are computed separately and subtracted. One final reduction is performed.
+    #[inline(always)]
+    pub fn linear_combination_i64<const NPLUS1: usize>(
+        pos: &[(Self, u64)], 
+        neg: &[(Self, u64)]
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        debug_assert!(!pos.is_empty(), "linear_combination_i64 requires at least one positive term");
+        debug_assert!(!neg.is_empty(), "linear_combination_i64 requires at least one negative term");
+        
+        // Compute unreduced positive sum
+        let mut pos_lc = pos[0].0.0.mul_u64_w_carry::<NPLUS1>(pos[0].1);
+        for (a, b) in &pos[1..] {
+            Self::mul_u64_accumulate::<NPLUS1>(&mut pos_lc, &a.0, *b);
+        }
+        
+        // Compute unreduced negative sum
+        let mut neg_lc = neg[0].0.0.mul_u64_w_carry::<NPLUS1>(neg[0].1);
+        for (a, b) in &neg[1..] {
+            Self::mul_u64_accumulate::<NPLUS1>(&mut neg_lc, &a.0, *b);
+        }
+        
+        // Subtract and reduce once
+        match pos_lc.cmp(&neg_lc) {
+            core::cmp::Ordering::Greater => {
+                let borrow = pos_lc.sub_with_borrow(&neg_lc);
+                debug_assert!(!borrow, "borrow in linear_combination_i64");
+                Self::from_unchecked_nplus1::<NPLUS1>(pos_lc)
+            }
+            core::cmp::Ordering::Less => {
+                let borrow = neg_lc.sub_with_borrow(&pos_lc);
+                debug_assert!(!borrow, "borrow in linear_combination_i64");
+                -Self::from_unchecked_nplus1::<NPLUS1>(neg_lc)
+            }
+            core::cmp::Ordering::Equal => Self::zero(),
+        }
+    }
+
+    /// Optimized version for exactly 2 terms: a₁×b₁ + a₂×b₂
+    /// Avoids slice overhead and loop setup costs.
+    #[inline(always)]
+    pub fn linear_combination_u64_2<const NPLUS1: usize>(
+        a1: &Self, b1: u64,
+        a2: &Self, b2: u64
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        
+        let mut acc = a1.0.mul_u64_w_carry::<NPLUS1>(b1);
+        Self::mul_u64_accumulate::<NPLUS1>(&mut acc, &a2.0, b2);
+        Self::from_unchecked_nplus1::<NPLUS1>(acc)
+    }
+
+    /// Optimized version for exactly 3 terms: a₁×b₁ + a₂×b₂ + a₃×b₃
+    #[inline(always)]
+    pub fn linear_combination_u64_3<const NPLUS1: usize>(
+        a1: &Self, b1: u64,
+        a2: &Self, b2: u64,
+        a3: &Self, b3: u64
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        
+        let mut acc = a1.0.mul_u64_w_carry::<NPLUS1>(b1);
+        Self::mul_u64_accumulate::<NPLUS1>(&mut acc, &a2.0, b2);
+        Self::mul_u64_accumulate::<NPLUS1>(&mut acc, &a3.0, b3);
+        Self::from_unchecked_nplus1::<NPLUS1>(acc)
+    }
 }
 
 #[inline(always)]
@@ -1538,7 +1625,7 @@ fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: us
     // unroll T::MODULUS_TIMES_2_NPLUS1 from ([u64; N], u64) to BigInt<N+1>
     let mut m2p = nplus1_pair_high_to_bigint::<N, NPLUS1>(T::MODULUS_TIMES_2_NPLUS1);
     // Compute m * 2p (N+1 limbs)
-    BigInt::mul_u64_in_place(&mut m2p, m);
+    m2p.mul_u64_in_place(m);
 
     // I really have no idea why the following sequence of operations
     // is significantly faster than a simple BigInt sub operation.
