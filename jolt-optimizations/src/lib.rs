@@ -15,8 +15,11 @@ pub mod decomp_4d;
 pub mod dory_g1;
 pub mod dory_g2;
 pub mod dory_utils;
+pub mod expression;
+pub mod fq12_poly;
 pub mod frobenius;
 pub mod glv_two;
+pub mod sz_check;
 
 mod glv_four;
 pub use glv_four::{
