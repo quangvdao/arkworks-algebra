@@ -142,3 +142,19 @@ pub fn g_coeffs() -> Vec<Fq> {
     g[12] = Fq::one();
     g
 }
+
+/// Convert Fq12 polynomial coefficients to multilinear evaluations by padding to 16 elements.
+/// The 12 coefficients are padded with 4 zeros to make a power-of-2 size suitable for
+/// multilinear polynomial commitment schemes.
+pub fn to_multilinear_evals(coeffs: &[Fq; 12]) -> Vec<Fq> {
+    let mut evals = coeffs.to_vec();
+    evals.resize(16, Fq::zero());
+    evals
+}
+
+/// Convert an Fq12 element to multilinear evaluations.
+/// First converts to polynomial coefficients, then pads to 16 elements.
+pub fn fq12_to_multilinear_evals(a: &Fq12) -> Vec<Fq> {
+    let coeffs = fq12_to_poly12_coeffs(a);
+    to_multilinear_evals(&coeffs)
+}

@@ -1,7 +1,8 @@
 use ark_bn254::{Fq, Fq12};
-use ark_ff::{Field, PrimeField, UniformRand};
+use ark_ff::{Field, PrimeField, UniformRand, Zero};
 use ark_std::test_rng;
 use jolt_optimizations::expression::{Expression, Term};
+use jolt_optimizations::fq12_poly::{fq12_to_multilinear_evals, fq12_to_poly12_coeffs};
 use jolt_optimizations::sz_check::{batch_verify, Product};
 
 #[test]
