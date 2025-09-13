@@ -910,4 +910,116 @@ fn test_prop_fmadd_trunc_random() {
     run_case!(3, 2, 2, 200);
 }
 
+// ==============================
+// Tests for add_trunc and add_assign_trunc (unsigned BigInt)
+// ==============================
+
+#[test]
+fn test_add_trunc_correctness_random() {
+    use crate::biginteger::BigInt;
+    let mut rng = ark_std::test_rng();
+
+    macro_rules! run_case {
+        ($n:expr, $m:expr, $p:expr, $iters:expr) => {{
+            for _ in 0..$iters {
+                let a: BigInt<$n> = UniformRand::rand(&mut rng);
+                let b: BigInt<$m> = UniformRand::rand(&mut rng);
+
+                let res = a.add_trunc::<$m, $p>(&b);
+
+                let a_bu = BigUint::from(a);
+                let b_bu = BigUint::from(b);
+                let modulus = BigUint::from(1u8) << (64 * $p);
+                let expected = (a_bu + b_bu) % &modulus;
+                assert_eq!(BigUint::from(res), expected);
+            }
+        }};
+    }
+
+    // Same-width, truncated equal width
+    run_case!(4, 4, 4, 200);
+    // Same-width, truncate to fewer limbs
+    run_case!(4, 4, 3, 200);
+    // Mixed widths, truncate to min and to max
+    run_case!(4, 2, 3, 200);
+    run_case!(2, 4, 2, 200);
+}
+
+#[test]
+fn test_add_assign_trunc_correctness_and_zeroing() {
+    use crate::biginteger::BigInt;
+    let mut rng = ark_std::test_rng();
+
+    // Case 1: N = 4, M = 4, P = 4 (no truncation); compare against add_trunc and add_with_carry
+    for _ in 0..200 {
+        let a: BigInt<4> = UniformRand::rand(&mut rng);
+        let b: BigInt<4> = UniformRand::rand(&mut rng);
+        let r_trunc = a.add_trunc::<4, 4>(&b);
+        let mut a2 = a;
+        a2.add_assign_trunc::<4, 4>(&b);
+        assert_eq!(a2, r_trunc);
+
+        // Regular add_with_carry should match lower 4 limbs modulo 2^(256)
+        let mut a3 = a;
+        a3.add_with_carry(&b);
+        assert_eq!(a3, r_trunc);
+    }
+
+    // Case 2: N = 4, M = 4, P = 3 (truncation) -> self's limb 3 must be zeroed
+    for _ in 0..200 {
+        let a: BigInt<4> = UniformRand::rand(&mut rng);
+        let b: BigInt<4> = UniformRand::rand(&mut rng);
+        let r_trunc = a.add_trunc::<4, 3>(&b);
+        let mut a2 = a;
+        a2.add_assign_trunc::<4, 3>(&b);
+        // Low 3 limbs match result
+        for i in 0..3 { assert_eq!(a2.0[i], r_trunc.0[i]); }
+        // Higher limbs of self must be zero
+        for i in 3..4 { assert_eq!(a2.0[i], 0); }
+    }
+
+    // Case 3: Mixed widths N = 4, M = 2, P = 3
+    for _ in 0..200 {
+        let a: BigInt<4> = UniformRand::rand(&mut rng);
+        let b: BigInt<2> = UniformRand::rand(&mut rng);
+        let r_trunc = a.add_trunc::<2, 3>(&b);
+        let mut a2 = a;
+        a2.add_assign_trunc::<2, 3>(&b);
+        for i in 0..3 { assert_eq!(a2.0[i], r_trunc.0[i]); }
+        // Truncated limb 3.. must be zero
+        for i in 3..4 { assert_eq!(a2.0[i], 0); }
+    }
+
+    // Case 4: Mixed widths N = 2, M = 4, P = 2 (limit is N so no zeroing beyond N)
+    for _ in 0..200 {
+        let a: BigInt<2> = UniformRand::rand(&mut rng);
+        let b: BigInt<4> = UniformRand::rand(&mut rng);
+        let r_trunc = a.add_trunc::<4, 2>(&b);
+        let mut a2 = a;
+        a2.add_assign_trunc::<4, 2>(&b);
+        assert_eq!(a2, r_trunc);
+    }
+}
+
+#[test]
+fn test_add_trunc_and_add_assign_trunc_overflow_edges() {
+    use crate::biginteger::BigInt;
+
+    // All-ones + all-ones with truncation
+    let a = BigInt::<4>::new([u64::MAX; 4]);
+    let b = BigInt::<4>::new([u64::MAX; 4]);
+    // P = 4: result should be wrapping add modulo 2^256
+    let r = a.add_trunc::<4, 4>(&b);
+    let mut a2 = a;
+    a2.add_assign_trunc::<4, 4>(&b);
+    assert_eq!(a2, r);
+
+    // P = 3: ensure high limb is zeroed in mutating version
+    let r3 = a.add_trunc::<4, 3>(&b);
+    let mut a3 = a;
+    a3.add_assign_trunc::<4, 3>(&b);
+    for i in 0..3 { assert_eq!(a3.0[i], r3.0[i]); }
+    assert_eq!(a3.0[3], 0);
+}
+
 }
