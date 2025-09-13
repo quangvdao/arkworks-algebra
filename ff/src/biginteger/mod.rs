@@ -344,6 +344,74 @@ impl<const N: usize> BigInt<N> {
         res
     }
 
+    /// Truncated-width addition: compute self + other and fit into P limbs; overflow is ignored.
+    #[inline]
+    pub fn add_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
+        let mut res = BigInt::<P>::zero();
+        let mut carry = 0u64;
+
+        // Add all limbs up to the result size P, using 0 for missing limbs
+        let min_size = core::cmp::min(N, M);
+        let max_size = core::cmp::max(N, M);
+
+        // Add corresponding limbs from both BigInts
+        for i in 0..core::cmp::min(min_size, P) {
+            res.0[i] = adc!(self.0[i], other.0[i], &mut carry);
+        }
+
+        // Handle remaining limbs from the larger BigInt
+        for i in min_size..core::cmp::min(max_size, P) {
+            let a = if i < N { self.0[i] } else { 0 };
+            let b = if i < M { other.0[i] } else { 0 };
+            res.0[i] = adc!(a, b, &mut carry);
+        }
+
+        // Propagate any remaining carry to unused limbs within P
+        let mut i = max_size;
+        while carry != 0 && i < P {
+            res.0[i] = adc!(res.0[i], 0, &mut carry);
+            i += 1;
+        }
+
+        res
+    }
+
+    /// Truncated-width addition that mutates self: self += other and fit result into P limbs; overflow is ignored.
+    #[inline]
+    pub fn add_assign_trunc<const M: usize, const P: usize>(&mut self, other: &BigInt<M>) {
+        let mut carry = 0u64;
+        let limit = core::cmp::min(P, N);
+
+        let overlap = core::cmp::min(limit, core::cmp::min(N, M));
+        for i in 0..overlap {
+            self.0[i] = adc!(self.0[i], other.0[i], &mut carry);
+        }
+
+        // If self has remaining limbs within the limit, add carry through them
+        if N > M {
+            for i in overlap..limit {
+                self.0[i] = adc!(self.0[i], 0, &mut carry);
+            }
+        } else if M > N {
+            // If other has remaining limbs within the limit, add them into self (self's lanes may be zero)
+            for i in overlap..core::cmp::min(M, limit) {
+                self.0[i] = adc!(0, other.0[i], &mut carry);
+            }
+        }
+
+        // Propagate any remaining carry within the limit
+        let mut i = core::cmp::min(core::cmp::max(N, M), limit);
+        while carry != 0 && i < limit {
+            self.0[i] = adc!(self.0[i], 0, &mut carry);
+            i += 1;
+        }
+
+        // Zero out the remaining limbs beyond the limit (truncate to P limbs)
+        for i in limit..N {
+            self.0[i] = 0;
+        }
+    }
+
     /// Fused multiply-add with truncation: acc += self * other, fitting into P limbs; overflow is ignored.
     /// This is a generic version for arbitrary limb widths of `self` and `other`.
     #[inline]
