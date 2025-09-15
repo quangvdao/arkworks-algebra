@@ -19,6 +19,7 @@ pub mod expression;
 pub mod fq12_poly;
 pub mod frobenius;
 pub mod glv_two;
+pub mod steps;
 pub mod sz_check;
 
 mod glv_four;
@@ -57,3 +58,11 @@ pub use dory_g2::{
 };
 
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
+
+pub use fq12_poly::{
+    fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs, g_eval, to_multilinear_evals,
+};
+
+pub use steps::{pow_with_steps_le, ExponentiationStep, ExponentiationSteps};
+
+pub use expression::{Expression, ExpressionSteps, Term};
