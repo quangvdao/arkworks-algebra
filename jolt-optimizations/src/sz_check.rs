@@ -4,6 +4,7 @@ use crate::fq12_poly::{fq12_to_poly12_coeffs, g_coeffs, poly_div_rem_monic, poly
 use ark_bn254::{Fq, Fq12};
 use ark_ff::{Field, Zero};
 
+#[derive(Clone)]
 pub struct Product {
     pub a: Fq12,
     pub b: Fq12,
