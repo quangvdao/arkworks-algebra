@@ -2,7 +2,7 @@ use allocative::Allocative;
 use ark_std::cmp::Ordering;
 use ark_std::vec::Vec;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use crate::biginteger::{BigInt, SignedBigInt};
+use crate::biginteger::{BigInt, SignedBigInt, S64, S128};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
     Write,
@@ -672,18 +672,58 @@ impl core::ops::Mul<&crate::biginteger::I8OrI96> for &S160 {
 // ------------------------------------------------------------------------------------------------
 
 impl From<i64> for S96 {
+    #[inline]
     fn from(val: i64) -> Self {
         Self::new([val.unsigned_abs()], 0, val.is_positive())
     }
 }
 
 impl From<u64> for S96 {
+    #[inline]
     fn from(val: u64) -> Self {
         Self::new([val], 0, true)
     }
 }
 
+impl From<S64> for S96 {
+    #[inline]
+    fn from(val: S64) -> Self {
+        Self::new([val.magnitude.0[0]], 0, val.is_positive)
+    }
+}
+
+impl From<i64> for S160 {
+    #[inline]
+    fn from(val: i64) -> Self {
+        Self::new([val.unsigned_abs(), 0], 0, val.is_positive())
+    }
+}
+
+impl From<u64> for S160 {
+    #[inline]
+    fn from(val: u64) -> Self {
+        Self::new([val, 0], 0, true)
+    }
+}
+
+impl From<S64> for S160 {
+    #[inline]
+    fn from(val: S64) -> Self {
+        Self::new([val.magnitude.0[0], 0], 0, val.is_positive)
+    }
+}
+
+impl From<u128> for S160 {
+    #[inline]
+    fn from(val: u128) -> Self {
+        let lo = val as u64;
+        let hi = (val >> 64) as u64;
+        Self::new([lo, hi], 0, true)
+    }
+}
+
 impl From<i128> for S160 {
+    #[inline]
     fn from(val: i128) -> Self {
         let is_positive = val.is_positive();
         let mag = val.unsigned_abs();
@@ -693,11 +733,10 @@ impl From<i128> for S160 {
     }
 }
 
-impl From<u128> for S160 {
-    fn from(val: u128) -> Self {
-        let lo = val as u64;
-        let hi = (val >> 64) as u64;
-        Self::new([lo, hi], 0, true)
+impl From<S128> for S160 {
+    #[inline]
+    fn from(val: S128) -> Self {
+        Self::new([val.magnitude.0[0], val.magnitude.0[1]], 0, val.is_positive)
     }
 }
 
