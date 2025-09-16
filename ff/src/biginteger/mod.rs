@@ -2,6 +2,7 @@ use crate::{
     bits::{BitIteratorBE, BitIteratorLE},
     const_for, UniformRand,
 };
+use allocative::Allocative;
 #[allow(unused)]
 use ark_ff_macros::unroll_for_loops;
 use ark_serialize::{
@@ -30,15 +31,15 @@ use zeroize::Zeroize;
 pub mod arithmetic;
 
 pub mod signed;
-pub use signed::{SignedBigInt, S64, S128, S196, S256};
+pub use signed::{SignedBigInt, S128, S196, S256, S64};
 
 pub mod signed_hi_32;
-pub use signed_hi_32::{SignedBigIntHi32, S96, S160, S224};
+pub use signed_hi_32::{SignedBigIntHi32, S160, S224, S96};
 
 pub mod i8_or_i96;
 pub use i8_or_i96::I8OrI96;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Zeroize)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Zeroize, Allocative)]
 pub struct BigInt<const N: usize>(pub [u64; N]);
 
 impl<const N: usize> Default for BigInt<N> {
@@ -388,7 +389,11 @@ impl<const N: usize> BigInt<N> {
     /// Fused multiply-add with truncation: acc += self * other, fitting into P limbs; overflow is ignored.
     /// This is a generic version for arbitrary limb widths of `self` and `other`.
     #[inline]
-    pub fn fmadd_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>, acc: &mut BigInt<P>) {
+    pub fn fmadd_trunc<const M: usize, const P: usize>(
+        &self,
+        other: &BigInt<M>,
+        acc: &mut BigInt<P>,
+    ) {
         let i_limit = core::cmp::min(N, P);
         for i in 0..i_limit {
             let mut carry = 0u64;
@@ -621,11 +626,7 @@ impl<const N: usize> BigInteger for BigInt<N> {
 
     #[inline]
     #[unroll_for_loops(8)]
-    fn fmu64a_carry_propagating<const NPLUS2: usize>(
-        &self,
-        other: u64,
-        acc: &mut BigInt<NPLUS2>,
-    ) {
+    fn fmu64a_carry_propagating<const NPLUS2: usize>(&self, other: u64, acc: &mut BigInt<NPLUS2>) {
         // ensure NPLUS2 is the correct size (N + 2 limbs)
         debug_assert!(NPLUS2 == N + 2);
         if other == 0 || self.is_zero() {
@@ -1593,11 +1594,7 @@ pub trait BigInteger:
     /// NEW! Fused multiply-accumulate with a u64 multiplier and explicit overflow propagation.
     /// Accumulates `self * other` into `acc`, which must have two extra limbs (N + 2).
     /// Any overflow from limb N is carried into limb N+1 instead of wrapping.
-    fn fmu64a_carry_propagating<const NPLUS2: usize>(
-        &self,
-        other: u64,
-        acc: &mut BigInt<NPLUS2>,
-    );
+    fn fmu64a_carry_propagating<const NPLUS2: usize>(&self, other: u64, acc: &mut BigInt<NPLUS2>);
 
     /// NEW! Multiplies self by a u128, returning a bigint with two extra limbs to hold overflow.
     fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(

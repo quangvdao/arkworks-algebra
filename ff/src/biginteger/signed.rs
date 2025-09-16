@@ -1,12 +1,14 @@
 use crate::biginteger::{BigInt, BigInteger};
+use allocative::Allocative;
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
+    Write,
+};
 use core::cmp::Ordering;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-#[cfg(feature = "allocative")]
-use allocative::Allocative;
 
 /// A signed big integer using arkworks BigInt for magnitude and a sign bit
-#[cfg_attr(feature = "allocative", derive(Allocative))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Allocative)]
 pub struct SignedBigInt<const N: usize> {
     pub magnitude: BigInt<N>,
     pub is_positive: bool,
@@ -26,8 +28,12 @@ impl<const N: usize> SignedBigInt<N> {
             let idx = i - 1;
             let a = if idx < N { self.magnitude.0[idx] } else { 0u64 };
             let b = if idx < M { rhs.magnitude.0[idx] } else { 0u64 };
-            if a > b { return Ordering::Greater; }
-            if a < b { return Ordering::Less; }
+            if a > b {
+                return Ordering::Greater;
+            }
+            if a < b {
+                return Ordering::Less;
+            }
             i -= 1;
         }
         Ordering::Equal
@@ -44,19 +50,28 @@ impl<const N: usize> SignedBigInt<N> {
     /// Construct from an existing BigInt magnitude and sign.
     #[inline]
     pub fn from_bigint(magnitude: BigInt<N>, is_positive: bool) -> Self {
-        Self { magnitude, is_positive }
+        Self {
+            magnitude,
+            is_positive,
+        }
     }
 
     /// Zero value with a positive sign (negative zero allowed elsewhere).
     #[inline]
     pub fn zero() -> Self {
-        Self { magnitude: BigInt::from(0u64), is_positive: true }
+        Self {
+            magnitude: BigInt::from(0u64),
+            is_positive: true,
+        }
     }
 
     /// One with a positive sign.
     #[inline]
     pub fn one() -> Self {
-        Self { magnitude: BigInt::from(1u64), is_positive: true }
+        Self {
+            magnitude: BigInt::from(1u64),
+            is_positive: true,
+        }
     }
 
     /// Return true if magnitude is zero (sign is not considered).
@@ -67,15 +82,21 @@ impl<const N: usize> SignedBigInt<N> {
 
     /// Borrow the magnitude (absolute value).
     #[inline]
-    pub fn as_magnitude(&self) -> &BigInt<N> { &self.magnitude }
+    pub fn as_magnitude(&self) -> &BigInt<N> {
+        &self.magnitude
+    }
 
     /// Return the magnitude limbs by value (copy).
     #[inline]
-    pub fn magnitude_limbs(&self) -> [u64; N] { self.magnitude.0 }
+    pub fn magnitude_limbs(&self) -> [u64; N] {
+        self.magnitude.0
+    }
 
     /// Borrow the magnitude limbs as a slice (avoids copying the array).
     #[inline]
-    pub fn magnitude_slice(&self) -> &[u64] { self.magnitude.as_ref() }
+    pub fn magnitude_slice(&self) -> &[u64] {
+        self.magnitude.as_ref()
+    }
 
     /// Return true iff the value is non-negative.
     #[inline]
@@ -85,15 +106,24 @@ impl<const N: usize> SignedBigInt<N> {
 
     /// Compute self + other modulo 2^(64*N); carry beyond N limbs is dropped.
     #[inline]
-    pub fn add(mut self, other: Self) -> Self { self += other; self }
+    pub fn add(mut self, other: Self) -> Self {
+        self += other;
+        self
+    }
 
     /// Compute self - other modulo 2^(64*N); borrow beyond N limbs is dropped.
     #[inline]
-    pub fn sub(mut self, other: Self) -> Self { self -= other; self }
+    pub fn sub(mut self, other: Self) -> Self {
+        self -= other;
+        self
+    }
 
     /// Compute self * other and keep only the low N limbs; high limbs are discarded.
     #[inline]
-    pub fn mul(mut self, other: Self) -> Self { self *= other; self }
+    pub fn mul(mut self, other: Self) -> Self {
+        self *= other;
+        self
+    }
 
     /// Flip the sign; zero is not canonicalized (negative zero may occur).
     #[inline]
@@ -112,13 +142,13 @@ impl<const N: usize> SignedBigInt<N> {
             match self.magnitude.cmp(&rhs.magnitude) {
                 Ordering::Greater | Ordering::Equal => {
                     let _borrow = self.magnitude.sub_with_borrow(&rhs.magnitude);
-                }
+                },
                 Ordering::Less => {
                     // Minimize copies: move rhs magnitude into place and subtract old self
                     let old = core::mem::replace(&mut self.magnitude, rhs.magnitude);
                     let _borrow = self.magnitude.sub_with_borrow(&old);
                     self.is_positive = rhs.is_positive;
-                }
+                },
             }
         }
     }
@@ -135,13 +165,13 @@ impl<const N: usize> SignedBigInt<N> {
                 Ordering::Greater | Ordering::Equal => {
                     let _borrow = self.magnitude.sub_with_borrow(&rhs.magnitude);
                     // sign stays the same
-                }
+                },
                 Ordering::Less => {
                     // Result takes rhs magnitude minus self magnitude, sign flips
                     let old = core::mem::replace(&mut self.magnitude, rhs.magnitude);
                     let _borrow = self.magnitude.sub_with_borrow(&old);
                     self.is_positive = !self.is_positive;
-                }
+                },
             }
         }
     }
@@ -176,7 +206,10 @@ impl<const N: usize> SignedBigInt<N> {
             if lim < M {
                 res.0[lim] = carry as u64;
             }
-            SignedBigInt::<M> { magnitude: res, is_positive: self.is_positive }
+            SignedBigInt::<M> {
+                magnitude: res,
+                is_positive: self.is_positive,
+            }
         } else {
             // Different signs -> subtract smaller magnitude from larger
             match self.magnitude.cmp(&rhs.magnitude) {
@@ -195,8 +228,11 @@ impl<const N: usize> SignedBigInt<N> {
                             borrow = b1;
                         }
                     }
-                    SignedBigInt::<M> { magnitude: res, is_positive: self.is_positive }
-                }
+                    SignedBigInt::<M> {
+                        magnitude: res,
+                        is_positive: self.is_positive,
+                    }
+                },
                 Ordering::Less => {
                     let mut res = BigInt::<M>::zero();
                     let lim = core::cmp::min(N, M);
@@ -212,8 +248,11 @@ impl<const N: usize> SignedBigInt<N> {
                             borrow = b1;
                         }
                     }
-                    SignedBigInt::<M> { magnitude: res, is_positive: rhs.is_positive }
-                }
+                    SignedBigInt::<M> {
+                        magnitude: res,
+                        is_positive: rhs.is_positive,
+                    }
+                },
             }
         }
     }
@@ -235,7 +274,10 @@ impl<const N: usize> SignedBigInt<N> {
             if lim < M {
                 res.0[lim] = carry as u64;
             }
-            SignedBigInt::<M> { magnitude: res, is_positive: self.is_positive }
+            SignedBigInt::<M> {
+                magnitude: res,
+                is_positive: self.is_positive,
+            }
         } else {
             // different signs wrt subtraction => subtract magnitudes
             match self.magnitude.cmp(&rhs.magnitude) {
@@ -254,8 +296,11 @@ impl<const N: usize> SignedBigInt<N> {
                             borrow = b1;
                         }
                     }
-                    SignedBigInt::<M> { magnitude: res, is_positive: self.is_positive }
-                }
+                    SignedBigInt::<M> {
+                        magnitude: res,
+                        is_positive: self.is_positive,
+                    }
+                },
                 Ordering::Less => {
                     let mut res = BigInt::<M>::zero();
                     let lim = core::cmp::min(N, M);
@@ -271,8 +316,11 @@ impl<const N: usize> SignedBigInt<N> {
                             borrow = b1;
                         }
                     }
-                    SignedBigInt::<M> { magnitude: res, is_positive: !self.is_positive }
-                }
+                    SignedBigInt::<M> {
+                        magnitude: res,
+                        is_positive: !self.is_positive,
+                    }
+                },
             }
         }
     }
@@ -280,7 +328,10 @@ impl<const N: usize> SignedBigInt<N> {
     /// Truncated mixed-width addition: compute (self + rhs) where rhs can have a
     /// different limb count, and fit into P limbs; overflow is ignored.
     #[inline]
-    pub fn add_trunc_mixed<const M: usize, const P: usize>(&self, rhs: &SignedBigInt<M>) -> SignedBigInt<P> {
+    pub fn add_trunc_mixed<const M: usize, const P: usize>(
+        &self,
+        rhs: &SignedBigInt<M>,
+    ) -> SignedBigInt<P> {
         // Case 1: same signs => add magnitudes, sign = self.is_positive
         if self.is_positive == rhs.is_positive {
             let mut res = BigInt::<P>::zero();
@@ -310,8 +361,13 @@ impl<const N: usize> SignedBigInt<N> {
                     k += 1;
                 }
             }
-            if k < P { res.0[k] = carry as u64; }
-            return SignedBigInt::<P> { magnitude: res, is_positive: self.is_positive };
+            if k < P {
+                res.0[k] = carry as u64;
+            }
+            return SignedBigInt::<P> {
+                magnitude: res,
+                is_positive: self.is_positive,
+            };
         }
 
         // Case 2: different signs => subtract smaller magnitude from larger
@@ -348,8 +404,11 @@ impl<const N: usize> SignedBigInt<N> {
                         k += 1;
                     }
                 }
-                SignedBigInt::<P> { magnitude: res, is_positive: self.is_positive }
-            }
+                SignedBigInt::<P> {
+                    magnitude: res,
+                    is_positive: self.is_positive,
+                }
+            },
             Ordering::Less => {
                 // res_mag = rhs.mag - self.mag; sign = rhs.is_positive
                 let mut res = BigInt::<P>::zero();
@@ -380,22 +439,35 @@ impl<const N: usize> SignedBigInt<N> {
                         k += 1;
                     }
                 }
-                SignedBigInt::<P> { magnitude: res, is_positive: rhs.is_positive }
-            }
+                SignedBigInt::<P> {
+                    magnitude: res,
+                    is_positive: rhs.is_positive,
+                }
+            },
         }
     }
 
     /// Truncated mul: compute self * rhs and fit into P limbs; no assumption on P; overflow ignored.
     #[inline]
-    pub fn mul_trunc<const M: usize, const P: usize>(&self, rhs: &SignedBigInt<M>) -> SignedBigInt<P> {
+    pub fn mul_trunc<const M: usize, const P: usize>(
+        &self,
+        rhs: &SignedBigInt<M>,
+    ) -> SignedBigInt<P> {
         let mag = self.magnitude.mul_trunc::<M, P>(&rhs.magnitude);
         let sign = self.is_positive == rhs.is_positive;
-        SignedBigInt::<P> { magnitude: mag, is_positive: sign }
+        SignedBigInt::<P> {
+            magnitude: mag,
+            is_positive: sign,
+        }
     }
 
     /// Fused multiply-add: acc += self * rhs, fitted into P limbs; overflow is ignored.
     #[inline]
-    pub fn fmadd_trunc<const M: usize, const P: usize>(&self, rhs: &SignedBigInt<M>, acc: &mut SignedBigInt<P>) {
+    pub fn fmadd_trunc<const M: usize, const P: usize>(
+        &self,
+        rhs: &SignedBigInt<M>,
+        acc: &mut SignedBigInt<P>,
+    ) {
         let prod_mag = self.magnitude.mul_trunc::<M, P>(&rhs.magnitude);
         let prod_sign = self.is_positive == rhs.is_positive;
         if acc.is_positive == prod_sign {
@@ -404,12 +476,12 @@ impl<const N: usize> SignedBigInt<N> {
             match acc.magnitude.cmp(&prod_mag) {
                 Ordering::Greater | Ordering::Equal => {
                     let _ = acc.magnitude.sub_with_borrow(&prod_mag);
-                }
+                },
                 Ordering::Less => {
                     let old = core::mem::replace(&mut acc.magnitude, prod_mag);
                     let _ = acc.magnitude.sub_with_borrow(&old);
                     acc.is_positive = prod_sign;
-                }
+                },
             }
         }
     }
@@ -463,7 +535,10 @@ impl<const N: usize> SignedBigInt<N> {
     /// Truncated mixed-width subtraction: compute (self - rhs) where rhs can have a
     /// different limb count, and fit into P limbs; overflow is ignored.
     #[inline]
-    pub fn sub_trunc_mixed<const M: usize, const P: usize>(&self, rhs: &SignedBigInt<M>) -> SignedBigInt<P> {
+    pub fn sub_trunc_mixed<const M: usize, const P: usize>(
+        &self,
+        rhs: &SignedBigInt<M>,
+    ) -> SignedBigInt<P> {
         // Case 1: different signs => addition of magnitudes, sign = self.is_positive
         if self.is_positive != rhs.is_positive {
             let mut res = BigInt::<P>::zero();
@@ -476,7 +551,10 @@ impl<const N: usize> SignedBigInt<N> {
                 res.0[i] = s2;
                 carry = (c1 as u8) | (c2 as u8);
             }
-            return SignedBigInt::<P> { magnitude: res, is_positive: self.is_positive };
+            return SignedBigInt::<P> {
+                magnitude: res,
+                is_positive: self.is_positive,
+            };
         }
 
         // Case 2: same signs => subtract smaller magnitude from larger; sign accordingly
@@ -490,8 +568,14 @@ impl<const N: usize> SignedBigInt<N> {
                 let idx = i - 1;
                 let a = if idx < N { self.magnitude.0[idx] } else { 0u64 };
                 let b = if idx < M { rhs.magnitude.0[idx] } else { 0u64 };
-                if a > b { ordering = Ordering::Greater; break; }
-                if a < b { ordering = Ordering::Less; break; }
+                if a > b {
+                    ordering = Ordering::Greater;
+                    break;
+                }
+                if a < b {
+                    ordering = Ordering::Less;
+                    break;
+                }
                 i -= 1;
             }
             ordering
@@ -515,8 +599,11 @@ impl<const N: usize> SignedBigInt<N> {
                         borrow = b1;
                     }
                 }
-                SignedBigInt::<P> { magnitude: res, is_positive: self.is_positive }
-            }
+                SignedBigInt::<P> {
+                    magnitude: res,
+                    is_positive: self.is_positive,
+                }
+            },
             Ordering::Less => {
                 // res_mag = rhs.mag - self.mag; sign = !self.is_positive
                 let mut res = BigInt::<P>::zero();
@@ -534,8 +621,11 @@ impl<const N: usize> SignedBigInt<N> {
                         borrow = b1;
                     }
                 }
-                SignedBigInt::<P> { magnitude: res, is_positive: !self.is_positive }
-            }
+                SignedBigInt::<P> {
+                    magnitude: res,
+                    is_positive: !self.is_positive,
+                }
+            },
         }
     }
 }
@@ -583,16 +673,26 @@ impl<const N: usize> From<i128> for SignedBigInt<N> {
 }
 
 // Specializations for common sizes
-impl SignedBigInt<1> {
+impl S64 {
     /// Convert to i128; any u64 magnitude fits for both signs.
     #[inline]
     pub fn to_i128(&self) -> i128 {
         let magnitude = self.magnitude.0[0];
-        if self.is_positive { magnitude as i128 } else { -(magnitude as i128) }
+        if self.is_positive {
+            magnitude as i128
+        } else {
+            -(magnitude as i128)
+        }
+    }
+
+    /// Return the magnitude as u64
+    #[inline]
+    pub fn magnitude_as_u64(&self) -> u64 {
+        self.magnitude.0[0]
     }
 }
 
-impl SignedBigInt<2> {
+impl S128 {
     /// Convert to i128 using 2^127 bounds: positive requires mag <= i128::MAX; negative allows mag == 2^127.
     #[inline]
     pub fn to_i128(&self) -> Option<i128> {
@@ -600,7 +700,9 @@ impl SignedBigInt<2> {
         let lo = self.magnitude.0[0];
         let hi_top_bit = hi >> 63; // bit 127
         if self.is_positive {
-            if hi_top_bit != 0 { return None; }
+            if hi_top_bit != 0 {
+                return None;
+            }
             let mag = ((hi as u128) << 64) | (lo as u128);
             Some(mag as i128)
         } else {
@@ -619,6 +721,40 @@ impl SignedBigInt<2> {
     #[inline]
     pub fn magnitude_as_u128(&self) -> u128 {
         (self.magnitude.0[1] as u128) << 64 | (self.magnitude.0[0] as u128)
+    }
+
+    /// Construct from u128 and sign
+    #[inline]
+    pub fn from_u128_and_sign(value: u128, is_positive: bool) -> Self {
+        Self::new([value as u64, (value >> 64) as u64], is_positive)
+    }
+
+    /// Exact product of u64 and i64 into S128 (u64 × s64 -> s128)
+    #[inline]
+    pub fn from_u64_mul_i64(u: u64, s: i64) -> Self {
+        let mag = (u as u128) * (s.unsigned_abs() as u128);
+        Self::from_u128_and_sign(mag, s >= 0)
+    }
+
+    /// Exact product of i64 and u64 into S128 (s64 × u64 -> s128)
+    #[inline]
+    pub fn from_i64_mul_u64(s: i64, u: u64) -> Self {
+        Self::from_u64_mul_i64(u, s)
+    }
+
+    /// Exact product of two u64 into S128 (u64 × u64 -> s128, non-negative)
+    #[inline]
+    pub fn from_u64_mul_u64(a: u64, b: u64) -> Self {
+        let mag = (a as u128) * (b as u128);
+        Self::from_u128_and_sign(mag, true)
+    }
+
+    /// Exact product of two i64 into S128 (s64 × s64 -> s128)
+    #[inline]
+    pub fn from_i64_mul_i64(a: i64, b: i64) -> Self {
+        let mag = (a.unsigned_abs() as u128) * (b.unsigned_abs() as u128);
+        let is_positive = (a >= 0) == (b >= 0);
+        Self::from_u128_and_sign(mag, is_positive)
     }
 }
 
@@ -776,5 +912,76 @@ impl<const N: usize> core::ops::Mul for &SignedBigInt<N> {
         let mut out = *self;
         out.mul_assign_in_place(rhs);
         out
+    }
+}
+
+// ===============================================
+// Ordering and canonical serialization
+// ===============================================
+
+impl<const N: usize> core::cmp::PartialOrd for SignedBigInt<N> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<const N: usize> core::cmp::Ord for SignedBigInt<N> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.is_positive, other.is_positive) {
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            _ => {
+                let ord = self.magnitude.cmp(&other.magnitude);
+                if self.is_positive {
+                    ord
+                } else {
+                    ord.reverse()
+                }
+            },
+        }
+    }
+}
+
+impl<const N: usize> CanonicalSerialize for SignedBigInt<N> {
+    #[inline]
+    fn serialize_with_mode<W: Write>(
+        &self,
+        mut w: W,
+        compress: Compress,
+    ) -> Result<(), SerializationError> {
+        // encode sign as a single byte then magnitude
+        (self.is_positive as u8).serialize_with_mode(&mut w, compress)?;
+        self.magnitude.serialize_with_mode(w, compress)
+    }
+
+    #[inline]
+    fn serialized_size(&self, compress: Compress) -> usize {
+        (self.is_positive as u8).serialized_size(compress)
+            + self.magnitude.serialized_size(compress)
+    }
+}
+
+impl<const N: usize> CanonicalDeserialize for SignedBigInt<N> {
+    #[inline]
+    fn deserialize_with_mode<R: Read>(
+        mut r: R,
+        compress: Compress,
+        validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        let sign_u8 = u8::deserialize_with_mode(&mut r, compress, validate)?;
+        let mag = BigInt::<N>::deserialize_with_mode(r, compress, validate)?;
+        Ok(SignedBigInt {
+            magnitude: mag,
+            is_positive: sign_u8 != 0,
+        })
+    }
+}
+
+impl<const N: usize> Valid for SignedBigInt<N> {
+    #[inline]
+    fn check(&self) -> Result<(), SerializationError> {
+        self.magnitude.check()
     }
 }

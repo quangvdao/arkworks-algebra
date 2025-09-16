@@ -1,18 +1,24 @@
-use core::ops::{Add, Sub, Mul, Neg, AddAssign, SubAssign, MulAssign};
+use allocative::Allocative;
 use ark_std::cmp::Ordering;
 use ark_std::vec::Vec;
+use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-/// Compact signed big-integer parameterized by limb count `N`, with top limb being u32
+/// Compact signed big-integer parameterized by limb count `N` (total width = `N*64 + 32` bits).
 ///
-/// Representation:
-/// - `magnitude_lo: [u64; N]` stores low limbs in little-endian order (index 0 is least significant).
-/// - `magnitude_hi: i32` is the high 32-bit tail
-/// - `is_positive: bool` is the sign
+/// Representation (sign-magnitude):
+/// - `magnitude_lo: [u64; N]` holds the low limbs in little-endian order (index 0 is least significant).
+/// - `magnitude_hi: u32` holds the high 32-bit tail of the magnitude.
+/// - `is_positive: bool` is the sign flag. The magnitude stores the absolute value.
+///
+/// Arithmetic semantics:
+/// - Addition, subtraction, and multiplication operate on magnitudes modulo `2^(64*N + 32)`
+///   and then set the sign via standard sign rules.
+/// - Zero is not normalized: a zero magnitude can be paired with either sign. Equality is structural,
+///   so `+0 != -0`. Callers that require canonical zero should normalize externally.
 ///
 /// Notes:
-/// - For most applications, `N` is typically ≤ 3, but the API supports larger `N`.
-#[cfg_attr(feature = "allocative", derive(Allocative))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// - Specialized fast paths exist for `N ∈ {0,1,2}`; larger `N` uses a generic path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Allocative)]
 pub struct SignedBigIntHi32<const N: usize> {
     /// Little-endian low limbs: limb 0 = low 64 bits, limb 1 = next 64 bits, and so on
     magnitude_lo: [u64; N],
@@ -84,7 +90,8 @@ impl<const N: usize> SignedBigIntHi32<N> {
         self.magnitude_hi
     }
 
-    /// Returns `true` if the number is non-negative.
+    /// Returns the sign flag (`true` for a positive sign).
+    /// Note: zero is not canonicalized; a zero magnitude can have either sign.
     pub const fn is_positive(&self) -> bool {
         self.is_positive
     }
@@ -130,13 +137,13 @@ impl<const N: usize> SignedBigIntHi32<N> {
                     let (lo, hi, _borrow) = self.sub_magnitudes_with_borrow(rhs);
                     self.magnitude_lo = lo;
                     self.magnitude_hi = hi;
-                }
+                },
                 Ordering::Less => {
                     let (lo, hi, _borrow) = rhs.sub_magnitudes_with_borrow(self);
                     self.magnitude_lo = lo;
                     self.magnitude_hi = hi;
                     self.is_positive = rhs.is_positive;
-                }
+                },
             }
         }
     }
@@ -166,9 +173,7 @@ impl<const N: usize> SignedBigIntHi32<N> {
             let t0 = (a0 as u128) * (b0 as u128);
             let lo0 = t0 as u64;
 
-            let cross = (t0 >> 64)
-                + (a0 as u128) * (b1 as u128)
-                + (a1 as u128) * (b0 as u128);
+            let cross = (t0 >> 64) + (a0 as u128) * (b1 as u128) + (a1 as u128) * (b0 as u128);
 
             let hi = (cross as u64 & 0xFFFF_FFFF) as u32;
             let mut lo = [0u64; N];
@@ -230,8 +235,7 @@ impl<const N: usize> SignedBigIntHi32<N> {
             let mut carry: u128 = 0;
             for j in 0..other_limbs.len() {
                 let idx = i + j;
-                let p = (self_limbs[i] as u128)
-                    * (other_limbs[j] as u128)
+                let p = (self_limbs[i] as u128) * (other_limbs[j] as u128)
                     + (prod[idx] as u128)
                     + carry;
                 prod[idx] = p as u64;
@@ -262,8 +266,7 @@ impl<const N: usize> SignedBigIntHi32<N> {
         let mut carry: u128 = 0;
 
         for i in 0..N {
-            let sum =
-                (self.magnitude_lo[i] as u128) + (other.magnitude_lo[i] as u128) + carry;
+            let sum = (self.magnitude_lo[i] as u128) + (other.magnitude_lo[i] as u128) + carry;
             magnitude_lo[i] = sum as u64;
             carry = sum >> 64;
         }
@@ -428,6 +431,42 @@ impl<'a, const N: usize> Mul for &'a SignedBigIntHi32<N> {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Symmetric mul: S160 * I8OrI96 -> S224 (for ergonomics)
+// ------------------------------------------------------------------------------------------------
+
+impl core::ops::Mul<crate::biginteger::I8OrI96> for S160 {
+    type Output = S224;
+    #[inline]
+    fn mul(self, rhs: crate::biginteger::I8OrI96) -> Self::Output {
+        rhs * self
+    }
+}
+
+impl core::ops::Mul<&crate::biginteger::I8OrI96> for S160 {
+    type Output = S224;
+    #[inline]
+    fn mul(self, rhs: &crate::biginteger::I8OrI96) -> Self::Output {
+        (*rhs) * self
+    }
+}
+
+impl core::ops::Mul<crate::biginteger::I8OrI96> for &S160 {
+    type Output = S224;
+    #[inline]
+    fn mul(self, rhs: crate::biginteger::I8OrI96) -> Self::Output {
+        rhs * *self
+    }
+}
+
+impl core::ops::Mul<&crate::biginteger::I8OrI96> for &S160 {
+    type Output = S224;
+    #[inline]
+    fn mul(self, rhs: &crate::biginteger::I8OrI96) -> Self::Output {
+        (*rhs) * *self
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
 // From traits
 // ------------------------------------------------------------------------------------------------
 
@@ -458,5 +497,14 @@ impl From<u128> for S160 {
         let lo = val as u64;
         let hi = (val >> 64) as u64;
         Self::new([lo, hi], 0, true)
+    }
+}
+
+impl From<S224> for crate::biginteger::BigInt<4> {
+    #[inline]
+    fn from(val: S224) -> Self {
+        let lo = val.magnitude_lo();
+        let hi = val.magnitude_hi() as u64;
+        crate::biginteger::BigInt::<4>([lo[0], lo[1], lo[2], hi])
     }
 }
