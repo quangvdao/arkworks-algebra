@@ -22,6 +22,8 @@ use ark_serialize::{
 ///   so `+0 != -0`. Callers that require canonical zero should normalize externally.
 ///
 /// Notes:
+/// - Zero is not normalized: a zero magnitude can be positive or negative. Structural equality
+///   distinguishes `+0` and `-0`, but ordering treats them as equal.
 /// - Specialized fast paths exist for `N ∈ {0,1,2}`; larger `N` uses a generic path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Allocative)]
 pub struct SignedBigIntHi32<const N: usize> {
@@ -566,6 +568,9 @@ impl<const N: usize> core::cmp::PartialOrd for SignedBigIntHi32<N> {
 impl<const N: usize> core::cmp::Ord for SignedBigIntHi32<N> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
+        if self.is_zero() && other.is_zero() {
+            return Ordering::Equal;
+        }
         match (self.is_positive, other.is_positive) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
