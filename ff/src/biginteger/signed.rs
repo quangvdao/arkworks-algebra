@@ -20,6 +20,13 @@ pub struct SignedBigInt<const N: usize> {
     pub is_positive: bool,
 }
 
+impl<const N: usize> Default for SignedBigInt<N> {
+    #[inline]
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
 pub type S64 = SignedBigInt<1>;
 pub type S128 = SignedBigInt<2>;
 pub type S192 = SignedBigInt<3>;
