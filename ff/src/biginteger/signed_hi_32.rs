@@ -2,7 +2,11 @@ use allocative::Allocative;
 use ark_std::cmp::Ordering;
 use ark_std::vec::Vec;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use crate::biginteger::BigInt;
+use crate::biginteger::{BigInt, SignedBigInt};
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
+    Write,
+};
 
 /// Compact signed big-integer parameterized by limb count `N` (total width = `N*64 + 32` bits).
 ///
@@ -311,6 +315,52 @@ impl<const N: usize> SignedBigIntHi32<N> {
         limbs[N] = self.magnitude_hi as u64;
         BigInt::<NPLUS1>(limbs)
     }
+
+    /// Zero-extend a smaller-width SignedBigIntHi32<M> into width N (little-endian).
+    /// Moves the 32-bit head of the smaller value into the next low 64-bit limb on widen,
+    /// and clears the head in the widened representation to preserve the numeric value.
+    /// Debug-asserts that M <= N.
+    #[inline]
+    pub fn zero_extend_from<const M: usize>(smaller: &SignedBigIntHi32<M>) -> SignedBigIntHi32<N> {
+        debug_assert!(M <= N, "cannot zero-extend: source has more limbs than destination");
+        if N == M {
+            return SignedBigIntHi32::<N>::new(
+                // copy to avoid borrowing issues
+                {
+                    let mut lo = [0u64; N];
+                    if N > 0 {
+                        lo.copy_from_slice(smaller.magnitude_lo());
+                    }
+                    lo
+                },
+                smaller.magnitude_hi(),
+                smaller.is_positive(),
+            );
+        }
+        // N > M
+        let mut lo = [0u64; N];
+        if M > 0 {
+            lo[..M].copy_from_slice(smaller.magnitude_lo());
+        }
+        // Place the 32-bit head into limb M
+        lo[M] = smaller.magnitude_hi() as u64;
+        SignedBigIntHi32::<N>::new(lo, 0u32, smaller.is_positive())
+    }
+
+    /// Convert this hi-32 representation into a standard SignedBigInt with N+1 limbs.
+    /// Packs the low limbs verbatim and writes the 32-bit head into the highest limb.
+    /// Debug-asserts that NPLUS1 == N + 1.
+    #[inline]
+    pub fn to_signed_bigint_nplus1<const NPLUS1: usize>(&self) -> SignedBigInt<NPLUS1> {
+        debug_assert!(NPLUS1 == N + 1, "to_signed_bigint_nplus1 requires NPLUS1 = N + 1");
+        let mut limbs = [0u64; NPLUS1];
+        if N > 0 {
+            limbs[..N].copy_from_slice(self.magnitude_lo());
+        }
+        limbs[N] = self.magnitude_hi() as u64;
+        let mag = BigInt::<NPLUS1>(limbs);
+        SignedBigInt::from_bigint(mag, self.is_positive())
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -442,6 +492,137 @@ impl<'a, const N: usize> Mul for &'a SignedBigIntHi32<N> {
         let (lo, hi) = self.mul_magnitudes(rhs);
         let is_positive = !(self.is_positive ^ rhs.is_positive);
         SignedBigIntHi32::new(lo, hi, is_positive)
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// S160-specific inherent constructors (ergonomic helpers)
+// ------------------------------------------------------------------------------------------------
+
+impl S160 {
+    /// Construct from the signed difference of two u64 values: returns |a - b| with sign a>=b.
+    #[inline]
+    pub fn from_diff_u64(a: u64, b: u64) -> Self {
+        let mag = a.abs_diff(b);
+        let is_positive = a >= b;
+        S160::new([mag, 0], 0, is_positive)
+    }
+
+    /// Construct from a u128 magnitude and an explicit sign.
+    #[inline]
+    pub fn from_magnitude_u128(mag: u128, is_positive: bool) -> Self {
+        let lo = mag as u64;
+        let hi = (mag >> 64) as u64;
+        S160::new([lo, hi], 0, is_positive)
+    }
+
+    /// Construct from the signed difference of two u128 values: returns |u1 - u2| with sign u1>=u2.
+    #[inline]
+    pub fn from_diff_u128(u1: u128, u2: u128) -> Self {
+        if u1 >= u2 {
+            S160::from_magnitude_u128(u1 - u2, true)
+        } else {
+            S160::from_magnitude_u128(u2 - u1, false)
+        }
+    }
+
+    /// Construct from the sum of two u128 values, preserving carry into the top 32-bit head.
+    #[inline]
+    pub fn from_sum_u128(u1: u128, u2: u128) -> Self {
+        let u1_lo = u1 as u64;
+        let u1_hi = (u1 >> 64) as u64;
+        let u2_lo = u2 as u64;
+        let u2_hi = (u2 >> 64) as u64;
+        let (sum_lo, carry0) = u1_lo.overflowing_add(u2_lo);
+        let (sum_hi1, carry1) = u1_hi.overflowing_add(u2_hi);
+        let (sum_hi, carry2) = sum_hi1.overflowing_add(if carry0 { 1 } else { 0 });
+        let carry_out = (carry1 as u8 | carry2 as u8) != 0;
+        S160::new([sum_lo, sum_hi], if carry_out { 1 } else { 0 }, true)
+    }
+
+    /// Construct from (u128 - i128) with full-width integer semantics.
+    #[inline]
+    pub fn from_u128_minus_i128(u: u128, i: i128) -> Self {
+        if i >= 0 {
+            S160::from_diff_u128(u, i as u128)
+        } else {
+            let abs_i: u128 = i.unsigned_abs();
+            S160::from_sum_u128(u, abs_i)
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Ordering and canonical serialization
+// ------------------------------------------------------------------------------------------------
+
+impl<const N: usize> core::cmp::PartialOrd for SignedBigIntHi32<N> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<const N: usize> core::cmp::Ord for SignedBigIntHi32<N> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.is_positive, other.is_positive) {
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            _ => {
+                let ord = self.compare_magnitudes(other);
+                if self.is_positive { ord } else { ord.reverse() }
+            },
+        }
+    }
+}
+
+impl<const N: usize> CanonicalSerialize for SignedBigIntHi32<N> {
+    #[inline]
+    fn serialize_with_mode<W: Write>(
+        &self,
+        mut w: W,
+        compress: Compress,
+    ) -> Result<(), SerializationError> {
+        // Encode sign, then (hi, lo)
+        (self.is_positive as u8).serialize_with_mode(&mut w, compress)?;
+        (self.magnitude_hi as i32).serialize_with_mode(&mut w, compress)?;
+        for i in 0..N {
+            self.magnitude_lo[i].serialize_with_mode(&mut w, compress)?;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn serialized_size(&self, compress: Compress) -> usize {
+        (self.is_positive as u8).serialized_size(compress)
+            + (self.magnitude_hi as i32).serialized_size(compress)
+            + (0u64).serialized_size(compress) * N
+    }
+}
+
+impl<const N: usize> CanonicalDeserialize for SignedBigIntHi32<N> {
+    #[inline]
+    fn deserialize_with_mode<R: Read>(
+        mut r: R,
+        compress: Compress,
+        validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        let sign_u8 = u8::deserialize_with_mode(&mut r, compress, validate)?;
+        let hi = i32::deserialize_with_mode(&mut r, compress, validate)?;
+        let mut lo = [0u64; N];
+        for i in 0..N {
+            lo[i] = u64::deserialize_with_mode(&mut r, compress, validate)?;
+        }
+        Ok(SignedBigIntHi32::new(lo, hi as u32, sign_u8 != 0))
+    }
+}
+
+impl<const N: usize> Valid for SignedBigIntHi32<N> {
+    #[inline]
+    fn check(&self) -> Result<(), SerializationError> {
+        // No additional invariants beyond structural fields
+        Ok(())
     }
 }
 
