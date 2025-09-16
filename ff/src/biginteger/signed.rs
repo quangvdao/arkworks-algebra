@@ -7,7 +7,13 @@ use ark_serialize::{
 use core::cmp::Ordering;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-/// A signed big integer using arkworks BigInt for magnitude and a sign bit
+/// A signed big integer using arkworks BigInt for magnitude and a sign bit.
+///
+/// Notes:
+/// - Zero is not canonicalized: a zero magnitude can be paired with either sign.
+///   Structural equality distinguishes `+0` and `-0` (since the sign bit differs).
+/// - Ordering treats `+0` and `-0` as equal: comparisons return `Ordering::Equal` when
+///   both magnitudes are zero regardless of sign.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Allocative)]
 pub struct SignedBigInt<const N: usize> {
     pub magnitude: BigInt<N>,
@@ -667,16 +673,16 @@ impl<const N: usize> core::cmp::PartialOrd for SignedBigInt<N> {
 impl<const N: usize> core::cmp::Ord for SignedBigInt<N> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
+        // Treat +0 and -0 as equal in ordering semantics
+        if self.magnitude.is_zero() && other.magnitude.is_zero() {
+            return Ordering::Equal;
+        }
         match (self.is_positive, other.is_positive) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
             _ => {
                 let ord = self.magnitude.cmp(&other.magnitude);
-                if self.is_positive {
-                    ord
-                } else {
-                    ord.reverse()
-                }
+                if self.is_positive { ord } else { ord.reverse() }
             },
         }
     }
