@@ -2,6 +2,7 @@ use allocative::Allocative;
 use ark_std::cmp::Ordering;
 use ark_std::vec::Vec;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use crate::biginteger::BigInt;
 
 /// Compact signed big-integer parameterized by limb count `N` (total width = `N*64 + 32` bits).
 ///
@@ -295,6 +296,20 @@ impl<const N: usize> SignedBigIntHi32<N> {
         let final_borrow = b1 || b2;
 
         (magnitude_lo, hi2, final_borrow)
+    }
+
+    /// Return the unsigned magnitude as a BigInt with N+1 limbs (little-endian),
+    /// packing `magnitude_lo` followed by `magnitude_hi` (widened to u64).
+    /// This ignores the sign; pair with `is_positive()` if you need a signed value.
+    #[inline]
+    pub fn magnitude_as_bigint_nplus1<const NPLUS1: usize>(&self) -> BigInt<NPLUS1> {
+        debug_assert!(NPLUS1 == N + 1, "NPLUS1 must be N+1 for SignedBigIntHi32 magnitude pack");
+        let mut limbs = [0u64; NPLUS1];
+        if N > 0 {
+            limbs[..N].copy_from_slice(&self.magnitude_lo);
+        }
+        limbs[N] = self.magnitude_hi as u64;
+        BigInt::<NPLUS1>(limbs)
     }
 }
 
