@@ -1,5 +1,10 @@
 use crate::biginteger::{S160, S224};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use allocative::Allocative;
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
+    Write,
+};
 
 /// Compact signed integer optimized for the common `i8` case, widening to a 96-bit
 /// split representation when needed (low 64 bits in `large_lo`, next 32 bits in `large_hi`).
@@ -28,7 +33,7 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 ///   it is truncated to signed 96-bit two's complement (wrapping modulo 2^96).
 /// - The `neg` implementation avoids `i8` overflow by widening `i8::MIN` to the wide form.
 /// - Conversions are total: `to_i128()` always returns the exact value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Allocative)]
 pub struct I8OrI96 {
     /// The lower 64 bits of the constant value.
     large_lo: u64,
@@ -598,5 +603,61 @@ impl Mul<S160> for I8OrI96 {
         }
 
         S224::new([r0, r1, r2], hi32, is_positive)
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Canonical serialization
+// ------------------------------------------------------------------------------------------------
+
+impl CanonicalSerialize for I8OrI96 {
+    #[inline]
+    fn serialize_with_mode<W: Write>(
+        &self,
+        mut w: W,
+        compress: Compress,
+    ) -> Result<(), SerializationError> {
+        // Print whether it is small (computed canonically from value), and the numeric value
+        // as 96-bit two's complement represented by (hi: i32, lo: u64), derived from to_i128().
+        let v = self.to_i128();
+        let is_small_value = v >= i8::MIN as i128 && v <= i8::MAX as i128;
+        let is_small_u8: u8 = if is_small_value { 1 } else { 0 };
+        is_small_u8.serialize_with_mode(&mut w, compress)?;
+
+        let hi: i32 = (v >> 64) as i32;
+        let lo: u64 = v as u64;
+        hi.serialize_with_mode(&mut w, compress)?;
+        lo.serialize_with_mode(w, compress)
+    }
+
+    #[inline]
+    fn serialized_size(&self, compress: Compress) -> usize {
+        (self.is_small as u8).serialized_size(compress)
+            + (0i32).serialized_size(compress)
+            + (0u64).serialized_size(compress)
+    }
+}
+
+impl CanonicalDeserialize for I8OrI96 {
+    #[inline]
+    fn deserialize_with_mode<R: Read>(
+        mut r: R,
+        compress: Compress,
+        validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        let _is_small = u8::deserialize_with_mode(&mut r, compress, validate)?;
+        let hi = i32::deserialize_with_mode(&mut r, compress, validate)?;
+        let lo = u64::deserialize_with_mode(r, compress, validate)?;
+        let v: i128 = ((hi as i128) << 64) | (lo as i128);
+        Ok(I8OrI96::from_i128(v))
+    }
+}
+
+impl Valid for I8OrI96 {
+    #[inline]
+    fn check(&self) -> Result<(), SerializationError> {
+        // All bit patterns of the struct represent either a small i8 or a 96-bit two's complement value.
+        // No additional invariants beyond that; always valid.
+        Ok(())
     }
 }
