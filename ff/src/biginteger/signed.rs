@@ -1,13 +1,21 @@
 use crate::biginteger::{BigInt, BigInteger};
 use core::cmp::Ordering;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+#[cfg(feature = "allocative")]
+use allocative::Allocative;
 
 /// A signed big integer using arkworks BigInt for magnitude and a sign bit
+#[cfg_attr(feature = "allocative", derive(Allocative))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SignedBigInt<const N: usize> {
     pub magnitude: BigInt<N>,
     pub is_positive: bool,
 }
+
+pub type S64 = SignedBigInt<1>;
+pub type S128 = SignedBigInt<2>;
+pub type S196 = SignedBigInt<3>;
+pub type S256 = SignedBigInt<4>;
 
 impl<const N: usize> SignedBigInt<N> {
     #[inline]
@@ -770,4 +778,3 @@ impl<const N: usize> core::ops::Mul for &SignedBigInt<N> {
         out
     }
 }
-

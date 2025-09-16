@@ -30,7 +30,13 @@ use zeroize::Zeroize;
 pub mod arithmetic;
 
 pub mod signed;
-pub use signed::SignedBigInt;
+pub use signed::{SignedBigInt, S64, S128, S196, S256};
+
+pub mod signed_hi_32;
+pub use signed_hi_32::{SignedBigIntHi32, S96, S160, S224};
+
+pub mod i8_or_i96;
+pub use i8_or_i96::I8OrI96;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 #[must_use]
