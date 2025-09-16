@@ -501,6 +501,18 @@ impl<const N: usize> BigInt<N> {
         let two_pow_n_times_64_square = crate::const_helpers::R2Buffer([0u64; N], [0u64; N], 1);
         const_modulo!(two_pow_n_times_64_square, self)
     }
+
+    /// Zero-extend a smaller BigInt<M> into BigInt<N> (little-endian limbs).
+    /// Debug-asserts that M <= N.
+    #[inline]
+    pub fn zero_extend_from<const M: usize>(smaller: &BigInt<M>) -> BigInt<N> {
+        debug_assert!(M <= N, "cannot zero-extend: source has more limbs than destination");
+        let mut limbs = [0u64; N];
+        let copy_len = if M < N { M } else { N };
+        limbs[..copy_len].copy_from_slice(&smaller.0[..copy_len]);
+        BigInt::<N>(limbs)
+    }
+
 }
 
 impl<const N: usize> BigInteger for BigInt<N> {

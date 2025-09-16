@@ -496,6 +496,44 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         }
     }
 
+    /// Construct from a smaller-width BigInt<M> by zero-extending into N limbs.
+    /// Returns None if the resulting N-limb value is >= modulus.
+    #[inline]
+    fn from_bigint_mixed<const M: usize>(r: BigInt<M>) -> Fp<MontBackend<Self, N>, N> {
+        debug_assert!(M <= N, "from_bigint_mixed requires M <= N");
+        let r_n = BigInt::<N>::zero_extend_from::<M>(&r);
+        Self::from_bigint(r_n).expect("from_bigint_mixed: value >= modulus")
+    }
+
+    /// Construct from a signed big integer with M 64-bit limbs (sign-magnitude).
+    /// Returns None if |x| >= modulus.
+    #[inline]
+    fn from_signed_bigint<const M: usize>(
+        x: crate::biginteger::SignedBigInt<M>,
+    ) -> Fp<MontBackend<Self, N>, N> {
+        // if x.is_zero() {
+        //     return Fp::zero();
+        // }
+        let fe = Self::from_bigint_mixed::<M>(x.magnitude);
+        if x.is_positive { fe } else { -fe }
+    }
+
+    /// Construct from a signed big integer with high 32-bit tail and K low 64-bit limbs.
+    /// KPLUS1 must be K+1; the magnitude packs as [lo[0..K], hi32 as u64].
+    /// Returns None if |x| >= modulus.
+    #[inline]
+    fn from_signed_bigint_hi32<const K: usize, const KPLUS1: usize>(
+        x: crate::biginteger::SignedBigIntHi32<K>,
+    ) -> Fp<MontBackend<Self, N>, N> {
+        debug_assert!(KPLUS1 == K + 1, "from_signed_bigint_hi32 requires KPLUS1 = K + 1");
+        // if x.is_zero() {
+        //     return Fp::zero();
+        // }
+        let mag = x.magnitude_as_bigint_nplus1::<KPLUS1>();
+        let fe = Self::from_bigint_mixed::<KPLUS1>(mag);
+        if x.is_positive() { fe } else { -fe }
+    }
+
     #[inline]
     #[cfg_attr(not(target_family = "wasm"), unroll_for_loops(12))]
     #[cfg_attr(target_family = "wasm", unroll_for_loops(6))]
@@ -878,7 +916,7 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         Self(element, PhantomData)
     }
 
-    /// NEW! Construct a new field element from a BigInt<NPLUS1>
+    /// Construct a new field element from a BigInt<NPLUS1>
     /// which is in montgomery form and just needs to be reduced
     /// via a barrett reduction.
     #[inline(always)]
@@ -888,7 +926,7 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         Self::new_unchecked(r)
     }
 
-    /// NEW! Construct a new field element from a BigInt<NPLUS2>
+    /// Construct a new field element from a BigInt<NPLUS2>
     /// which is in montgomery form and just needs to be reduced
     /// via a barrett reduction.
     #[inline]
@@ -903,6 +941,29 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         let c2 = nplus1_pair_low_to_bigint::<N, NPLUS1>((element.0[0], r1.0)); // c2 has N+1 limbs
         let r2 = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c2); // r2 = c2 mod p = c mod p ([u64; N])
         Self::new_unchecked(r2)
+    }
+
+    /// Construct from a smaller-width BigInt<M> by zero-extending into N limbs.
+    /// Panics if the resulting value is >= modulus.
+    #[inline]
+    pub fn from_bigint_mixed<const M: usize>(r: BigInt<M>) -> Self {
+        T::from_bigint_mixed::<M>(r)
+    }
+
+    /// Construct from a signed big integer (sign-magnitude with M limbs).
+    /// Panics if |x| >= modulus.
+    #[inline]
+    pub fn from_signed_bigint<const M: usize>(x: crate::biginteger::SignedBigInt<M>) -> Self {
+        T::from_signed_bigint::<M>(x)
+    }
+
+    /// Construct from a signed big integer with high 32-bit tail and K low 64-bit limbs.
+    /// KPLUS1 must be K+1. Panics if |x| >= modulus.
+    #[inline]
+    pub fn from_signed_bigint_hi32<const K: usize, const KPLUS1: usize>(
+        x: crate::biginteger::SignedBigIntHi32<K>,
+    ) -> Self {
+        T::from_signed_bigint_hi32::<K, KPLUS1>(x)
     }
 
     const fn const_is_zero(&self) -> bool {
