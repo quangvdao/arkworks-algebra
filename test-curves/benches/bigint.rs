@@ -1,6 +1,6 @@
 // Benchmark for BigInt operations
 #[cfg(feature = "bn254")]
-use ark_ff::{BigInteger, BigInt};
+use ark_ff::{BigInt, BigInteger};
 #[cfg(feature = "bn254")]
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 #[cfg(feature = "bn254")]
@@ -14,21 +14,25 @@ fn bigint_add_bench(c: &mut Criterion) {
 
     // Generate random BigInt<4> instances for benchmarking
     let a_bigints = (0..SAMPLES)
-        .map(|_| BigInt::<4>([
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-        ]))
+        .map(|_| {
+            BigInt::<4>([
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+            ])
+        })
         .collect::<Vec<_>>();
 
     let b_bigints = (0..SAMPLES)
-        .map(|_| BigInt::<4>([
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-        ]))
+        .map(|_| {
+            BigInt::<4>([
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+                rng.gen::<u64>(),
+            ])
+        })
         .collect::<Vec<_>>();
 
     let mut group = c.benchmark_group("BigInt<4> Addition Comparison");
@@ -117,9 +121,7 @@ fn bigint_add_bench(c: &mut Criterion) {
 
     // Test case: addition that would overflow to compare truncation behavior
     let max_bigints = (0..SAMPLES)
-        .map(|_| BigInt::<4>([
-            u64::MAX, u64::MAX, u64::MAX, u64::MAX,
-        ]))
+        .map(|_| BigInt::<4>([u64::MAX, u64::MAX, u64::MAX, u64::MAX]))
         .collect::<Vec<_>>();
 
     group.bench_function("add_trunc overflow case", |bench| {

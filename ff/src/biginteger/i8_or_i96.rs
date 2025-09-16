@@ -1,4 +1,5 @@
-use core::ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign};
+use crate::biginteger::{S160, S224};
+use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// Compact signed integer optimized for the common `i8` case, widening to a 96-bit
 /// split representation when needed (low 64 bits in `large_lo`, next 32 bits in `large_hi`).
@@ -22,7 +23,9 @@ use core::ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign};
 /// This is equivalent to sign-extending `large_hi` and zero-extending `large_lo`.
 ///
 /// ## Notes:
-/// - Arithmetic uses exact `i128` semantics (no modular reduction, no saturation).
+/// - Arithmetic uses `i128` for intermediate computation but the representation is signed 96-bit.
+///   Results are canonicalized to the smallest fitting form. If a result does not fit in 96 bits,
+///   it is truncated to signed 96-bit two's complement (wrapping modulo 2^96).
 /// - The `neg` implementation avoids `i8` overflow by widening `i8::MIN` to the wide form.
 /// - Conversions are total: `to_i128()` always returns the exact value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -315,7 +318,7 @@ impl Ord for I8OrI96 {
             Ordering::Equal => {
                 // If high parts are the same, the order is determined by the low parts.
                 self_lo.cmp(&other_lo)
-            }
+            },
             order => order,
         }
     }
@@ -444,5 +447,156 @@ impl core::convert::TryFrom<u128> for I8OrI96 {
         } else {
             Err(TryFromU128Error)
         }
+    }
+}
+
+impl Mul<S160> for I8OrI96 {
+    type Output = S224;
+
+    #[inline]
+    fn mul(self, rhs: S160) -> Self::Output {
+        // Determine sign of self
+        let self_is_positive = if self.is_small {
+            self.small_i8 >= 0
+        } else {
+            self.large_hi >= 0
+        };
+
+        // Extract rhs magnitude limbs
+        let rhs_lo = rhs.magnitude_lo();
+        let b0 = rhs_lo[0];
+        let b1 = rhs_lo[1];
+        let b2 = rhs.magnitude_hi() as u64; // widen for math
+        let b1_is_zero = b1 == 0;
+        let b2_is_zero = b2 == 0;
+        let rhs_is_zero = (b0 | b1 | b2) == 0;
+
+        if rhs_is_zero {
+            return S224::zero();
+        }
+
+        // Compute absolute magnitude of self as 96-bit split (x0: u64, x1: u32)
+        let (x0, x1_u32) = if self.is_small {
+            let v = self.small_i8;
+            let k = if v < 0 {
+                (-(v as i16)) as u64
+            } else {
+                v as u64
+            };
+            (k, 0u32)
+        } else {
+            let hi = self.large_hi;
+            if hi >= 0 {
+                (self.large_lo, hi as u32)
+            } else {
+                // Two's-complement absolute: (~lo, ~hi) + 1
+                let inv_lo = !self.large_lo;
+                let inv_hi = !(hi as u32);
+                let sum_lo = inv_lo.wrapping_add(1);
+                let carry = (sum_lo == 0) as u32;
+                let sum_hi = inv_hi.wrapping_add(carry);
+                (sum_lo, sum_hi)
+            }
+        };
+
+        // Compute magnitude product truncated to 224 bits: [r0,r1,r2] + hi32
+        let (r0, r1, r2, hi32) = if x1_u32 == 0 {
+            // Fast path: scalar (<= 8-bit) * 160-bit
+            let k = x0;
+            let mut c0 = 0u64;
+            let r0 = mac_with_carry!(0u64, b0, k, &mut c0);
+
+            if b1_is_zero {
+                if b2_is_zero {
+                    // Only 64-bit rhs
+                    let r1 = c0;
+                    (r0, r1, 0u64, 0u32)
+                } else {
+                    // 128-bit rhs via b2 only
+                    let r1 = c0;
+                    let mut hi = 0u64;
+                    let r2 = mac_with_carry!(0u64, b2, k, &mut hi);
+                    let hi32 = hi as u32;
+                    (r0, r1, r2, hi32)
+                }
+            } else if b2_is_zero {
+                // 128-bit rhs via b1 only
+                let mut c1 = c0;
+                let r1p = mac_with_carry!(0u64, b1, k, &mut c1);
+                let r1 = adc!(r1p, 0u64, &mut c1);
+                let r2 = c1;
+                (r0, r1, r2, 0u32)
+            } else {
+                // Full 160-bit rhs
+                let mut c1 = c0;
+                let r1 = mac_with_carry!(0u64, b1, k, &mut c1);
+
+                let mut c2 = 0u64;
+                let mut r2 = mac_with_carry!(0u64, b2, k, &mut c2);
+                r2 = adc!(r2, c1, &mut c2);
+                let hi32 = c2 as u32;
+                (r0, r1, r2, hi32)
+            }
+        } else {
+            // General 96-bit (2 limbs: x0, x1_u32) times 160-bit (3 limbs: b0, b1, b2)
+            let x1 = x1_u32 as u64;
+
+            let mut c0 = 0u64;
+            let r0 = mac_with_carry!(0u64, x0, b0, &mut c0);
+
+            if b1_is_zero {
+                if b2_is_zero {
+                    // Only 64-bit rhs
+                    let mut c1 = c0;
+                    let r1 = mac_with_carry!(0u64, x1, b0, &mut c1);
+                    let r2 = c1;
+                    (r0, r1, r2, 0u32)
+                } else {
+                    // No b1, but have b2
+                    let mut c1 = c0;
+                    let r1 = mac_with_carry!(0u64, x1, b0, &mut c1);
+
+                    let mut c2 = c1;
+                    let r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
+
+                    let mut carry_hi = c2;
+                    crate::biginteger::arithmetic::mac_discard(carry_hi, x1, b2, &mut carry_hi);
+                    let hi32 = carry_hi as u32;
+                    (r0, r1, r2, hi32)
+                }
+            } else if b2_is_zero {
+                // No b2, but have b1
+                let mut c1 = c0;
+                let mut r1 = mac_with_carry!(0u64, x0, b1, &mut c1);
+                r1 = mac_with_carry!(r1, x1, b0, &mut c1);
+
+                let mut c2 = c1;
+                let r2 = mac_with_carry!(0u64, x1, b1, &mut c2);
+                let hi32 = c2 as u32;
+                (r0, r1, r2, hi32)
+            } else {
+                // Full 160-bit rhs
+                let mut c1 = c0;
+                let mut r1 = mac_with_carry!(0u64, x0, b1, &mut c1);
+                r1 = mac_with_carry!(r1, x1, b0, &mut c1);
+
+                let mut c2 = c1;
+                let mut r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
+                r2 = mac_with_carry!(r2, x1, b1, &mut c2);
+
+                let mut carry_hi = c2;
+                crate::biginteger::arithmetic::mac_discard(carry_hi, x1, b2, &mut carry_hi);
+                let hi32 = carry_hi as u32;
+                (r0, r1, r2, hi32)
+            }
+        };
+
+        // Combine sign; canonicalize zero to positive
+        let mut is_positive = !(self_is_positive ^ rhs.is_positive());
+        if (r0 | r1 | r2) == 0 && hi32 == 0 {
+            is_positive = true;
+        }
+
+        S224::new([r0, r1, r2], hi32, is_positive)
     }
 }
