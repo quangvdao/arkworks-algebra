@@ -32,7 +32,7 @@ use zeroize::Zeroize;
 pub mod arithmetic;
 
 pub mod signed;
-pub use signed::{SignedBigInt, S128, S196, S256, S64};
+pub use signed::{SignedBigInt, S128, S192, S256, S64};
 
 pub mod signed_hi_32;
 pub use signed_hi_32::{SignedBigIntHi32, S160, S224, S96};
@@ -385,6 +385,29 @@ impl<const N: usize> BigInt<N> {
         res
     }
 
+    /// Truncated-width subtraction: compute self - other and fit into P limbs; borrow is ignored beyond P limbs.
+    #[inline]
+    pub fn sub_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
+        let mut res = BigInt::<P>::zero();
+        let mut borrow = false;
+
+        for i in 0..P {
+            let a = if i < N { self.0[i] } else { 0u64 };
+            let b = if i < M { other.0[i] } else { 0u64 };
+            let (d1, b1) = a.overflowing_sub(b);
+            if borrow {
+                let (d2, b2) = d1.overflowing_sub(1);
+                res.0[i] = d2;
+                borrow = b1 || b2;
+            } else {
+                res.0[i] = d1;
+                borrow = b1;
+            }
+        }
+
+        res
+    }
+
     /// Truncated-width addition that mutates self: self += other and fit result into P limbs; overflow is ignored.
     #[inline]
     pub fn add_assign_trunc<const M: usize, const P: usize>(&mut self, other: &BigInt<M>) {
@@ -440,6 +463,58 @@ impl<const N: usize> BigInt<N> {
                 let (new_val, _of) = acc.0[i + j_limit].overflowing_add(carry);
                 acc.0[i + j_limit] = new_val;
             }
+        }
+    }
+
+    /// Internal core engine: accumulate self * other_limbs into acc starting at lane_offset.
+    /// If carry_propagate is true, propagate spill from the highest updated limb forward within P;
+    /// otherwise, wrap in-place (discard further carry), matching existing wrapper semantics.
+    #[inline]
+    #[unroll_for_loops(6)]
+    pub(crate) fn fm_limbs_into<const P: usize>(
+        &self,
+        other_limbs: &[u64],
+        acc: &mut BigInt<P>,
+        lane_offset: usize,
+        carry_propagate: bool,
+    ) {
+        if self.is_zero() {
+            return;
+        }
+        for (j, &mul_limb) in other_limbs.iter().enumerate() {
+            if mul_limb == 0 {
+                continue;
+            }
+            let base = lane_offset + j;
+            let mut carry = 0u64;
+            // Accumulate across self's limbs
+            for i in 0..N {
+                let idx = base + i;
+                if idx >= P {
+                    // Out of truncation range; compute carry but discard writes
+                    // We still need to advance carry for correctness within truncated semantics? No: any
+                    // contribution beyond P is dropped modulo 2^(64*P), so we can break.
+                    break;
+                }
+                acc.0[idx] = mac_with_carry!(acc.0[idx], self.0[i], mul_limb, &mut carry);
+            }
+            // Add remaining carry into next limb if within width
+            let next = base + N;
+            if next < P {
+                let (v, mut of) = acc.0[next].overflowing_add(carry);
+                acc.0[next] = v;
+                if carry_propagate && of {
+                    // propagate into higher limbs until carry consumed or width exhausted
+                    let mut k = next + 1;
+                    while of && k < P {
+                        let (nv, nof) = acc.0[k].overflowing_add(1);
+                        acc.0[k] = nv;
+                        of = nof;
+                        k += 1;
+                    }
+                }
+            }
+            // else: spill beyond P is dropped by truncation
         }
     }
 
@@ -646,277 +721,45 @@ impl<const N: usize> BigInteger for BigInt<N> {
     }
 
     #[inline]
-    #[unroll_for_loops(8)]
     fn fmu64a<const NPLUS1: usize>(&self, other: u64, acc: &mut BigInt<NPLUS1>) {
-        // ensure NPLUS1 is the correct size
         debug_assert!(NPLUS1 == N + 1);
-        // special cases for 0 and 1
-        if other == 0 || self.is_zero() {
-            // idempotent
-            return;
-        } else if other == 1 {
-            // just addition
-            let mut carry = 0;
-            for i in 0..N {
-                carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
-            }
-            acc.0[N] = acc.0[N].wrapping_add(carry as u64);
-            return;
-        }
-        // otherwise fma
-        let mut carry = 0;
-        for i in 0..N {
-            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other, &mut carry);
-        }
-        acc.0[N] = acc.0[N].wrapping_add(carry as u64);
+        self.fm_limbs_into::<NPLUS1>(&[other], acc, 0, false);
     }
 
     #[inline]
     #[unroll_for_loops(8)]
     fn fmu64a_carry_propagating<const NPLUS2: usize>(&self, other: u64, acc: &mut BigInt<NPLUS2>) {
-        // ensure NPLUS2 is the correct size (N + 2 limbs)
         debug_assert!(NPLUS2 == N + 2);
-        if other == 0 || self.is_zero() {
-            return;
-        }
-        if other == 1 {
-            let mut carry: u8 = 0;
-            for i in 0..N {
-                carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
-            }
-            let (new_n, of1) = acc.0[N].overflowing_add(carry as u64);
-            acc.0[N] = new_n;
-            if of1 {
-                acc.0[N + 1] = acc.0[N + 1].wrapping_add(1);
-            }
-            return;
-        }
-        let mut carry = 0u64;
-        for i in 0..N {
-            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other, &mut carry);
-        }
-        let (new_n, of1) = acc.0[N].overflowing_add(carry);
-        acc.0[N] = new_n;
-        if of1 {
-            acc.0[N + 1] = acc.0[N + 1].wrapping_add(1);
-        }
+        self.fm_limbs_into::<NPLUS2>(&[other], acc, 0, true);
     }
 
     #[inline]
     #[unroll_for_loops(8)]
     fn fm128a<const NPLUS2: usize>(&self, other: u128, acc: &mut BigInt<NPLUS2>) {
-        // ensure NPLUS2 is the correct size (N + 2 limbs)
         debug_assert!(NPLUS2 == N + 2);
-        // special cases for 0 and 1
-        // if other == 0 || self.is_zero() {
-        //     // idempotent
-        //     return;
-        // } else if other == 1 {
-        //     // just addition into lower N limbs; propagate final carry into acc[N]
-        //     let mut carry = 0;
-        //     for i in 0..N {
-        //         carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
-        //     }
-        //     // carry is at most 1; fold into limb N (wrapping into highest limb if needed later)
-        //     acc.0[N] = acc.0[N].wrapping_add(carry as u64);
-        //     return;
-        // }
-
-        let other_lo = other as u64;
-        let other_hi = (other >> 64) as u64;
-
-        // Accumulate self * other_lo into acc[0..=N]
-        let mut carry = 0u64;
-        for i in 0..N {
-            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other_lo, &mut carry);
-        }
-        // Add final carry into limb N, propagating into highest limb if it overflows
-        let (new_n, of1) = acc.0[N].overflowing_add(carry);
-        acc.0[N] = new_n;
-        if of1 {
-            acc.0[N + 1] = acc.0[N + 1].wrapping_add(1);
-        }
-
-        // Accumulate self * other_hi into acc[1..=N+1]
-        let mut carry2 = 0u64;
-        for i in 0..N {
-            acc.0[i + 1] = mac_with_carry!(acc.0[i + 1], self.0[i], other_hi, &mut carry2);
-        }
-        acc.0[N + 1] = acc.0[N + 1].wrapping_add(carry2);
+        let limbs = [other as u64, (other >> 64) as u64];
+        self.fm_limbs_into::<NPLUS2>(&limbs, acc, 0, true);
     }
 
     #[inline]
     #[unroll_for_loops(8)]
     fn fmu64a_into_nplus4<const NPLUS4: usize>(&self, other: u64, acc: &mut BigInt<NPLUS4>) {
         debug_assert!(NPLUS4 == N + 4);
-        if other == 0 || self.is_zero() {
-            return;
-        }
-        if other == 1 {
-            let mut carry: u8 = 0;
-            for i in 0..N {
-                carry = arithmetic::adc_for_add_with_carry(&mut acc.0[i], self.0[i], carry);
-            }
-            if carry != 0 {
-                let (n0, of0) = acc.0[N].overflowing_add(1);
-                acc.0[N] = n0;
-                if of0 {
-                    let (n1, of1) = acc.0[N + 1].overflowing_add(1);
-                    acc.0[N + 1] = n1;
-                    if of1 {
-                        let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                        acc.0[N + 2] = n2;
-                        if of2 {
-                            let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                            acc.0[N + 3] = n3;
-                        }
-                    }
-                }
-            }
-            return;
-        }
-        let mut carry0 = 0u64;
-        for i in 0..N {
-            acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], other, &mut carry0);
-        }
-        if carry0 != 0 {
-            let (n0, of0) = acc.0[N].overflowing_add(carry0);
-            acc.0[N] = n0;
-            if of0 {
-                let (n1, of1) = acc.0[N + 1].overflowing_add(1);
-                acc.0[N + 1] = n1;
-                if of1 {
-                    let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                    acc.0[N + 2] = n2;
-                    if of2 {
-                        let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                        acc.0[N + 3] = n3;
-                    }
-                }
-            }
-        }
+        self.fm_limbs_into::<NPLUS4>(&[other], acc, 0, true);
     }
 
     #[inline]
     #[unroll_for_loops(8)]
     fn fm2x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 2], acc: &mut BigInt<NPLUS4>) {
         debug_assert!(NPLUS4 == N + 4);
-        let lo = other[0];
-        let hi = other[1];
-        if (lo | hi) == 0 || self.is_zero() {
-            return;
-        }
-
-        if lo != 0 {
-            let mut carry0 = 0u64;
-            for i in 0..N {
-                acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], lo, &mut carry0);
-            }
-            if carry0 != 0 {
-                let (n0, of0) = acc.0[N].overflowing_add(carry0);
-                acc.0[N] = n0;
-                if of0 {
-                    let (n1, of1) = acc.0[N + 1].overflowing_add(1);
-                    acc.0[N + 1] = n1;
-                    if of1 {
-                        let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                        acc.0[N + 2] = n2;
-                        if of2 {
-                            let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                            acc.0[N + 3] = n3;
-                        }
-                    }
-                }
-            }
-        }
-
-        if hi != 0 {
-            let mut carry1 = 0u64;
-            for i in 0..N {
-                acc.0[i + 1] = mac_with_carry!(acc.0[i + 1], self.0[i], hi, &mut carry1);
-            }
-            if carry1 != 0 {
-                let (n1, of1) = acc.0[N + 1].overflowing_add(carry1);
-                acc.0[N + 1] = n1;
-                if of1 {
-                    let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                    acc.0[N + 2] = n2;
-                    if of2 {
-                        let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                        acc.0[N + 3] = n3;
-                    }
-                }
-            }
-        }
+        self.fm_limbs_into::<NPLUS4>(&other, acc, 0, true);
     }
 
     #[inline]
     #[unroll_for_loops(8)]
     fn fm3x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 3], acc: &mut BigInt<NPLUS4>) {
         debug_assert!(NPLUS4 == N + 4);
-        let o0 = other[0];
-        let o1 = other[1];
-        let o2 = other[2];
-        if (o0 | o1 | o2) == 0 || self.is_zero() {
-            return;
-        }
-
-        if o0 != 0 {
-            let mut carry0 = 0u64;
-            for i in 0..N {
-                acc.0[i] = mac_with_carry!(acc.0[i], self.0[i], o0, &mut carry0);
-            }
-            if carry0 != 0 {
-                let (n0, of0) = acc.0[N].overflowing_add(carry0);
-                acc.0[N] = n0;
-                if of0 {
-                    let (n1, of1) = acc.0[N + 1].overflowing_add(1);
-                    acc.0[N + 1] = n1;
-                    if of1 {
-                        let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                        acc.0[N + 2] = n2;
-                        if of2 {
-                            let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                            acc.0[N + 3] = n3;
-                        }
-                    }
-                }
-            }
-        }
-
-        if o1 != 0 {
-            let mut carry1 = 0u64;
-            for i in 0..N {
-                acc.0[i + 1] = mac_with_carry!(acc.0[i + 1], self.0[i], o1, &mut carry1);
-            }
-            if carry1 != 0 {
-                let (n1, of1) = acc.0[N + 1].overflowing_add(carry1);
-                acc.0[N + 1] = n1;
-                if of1 {
-                    let (n2, of2) = acc.0[N + 2].overflowing_add(1);
-                    acc.0[N + 2] = n2;
-                    if of2 {
-                        let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                        acc.0[N + 3] = n3;
-                    }
-                }
-            }
-        }
-
-        if o2 != 0 {
-            let mut carry2 = 0u64;
-            for i in 0..N {
-                acc.0[i + 2] = mac_with_carry!(acc.0[i + 2], self.0[i], o2, &mut carry2);
-            }
-            if carry2 != 0 {
-                let (n2, of2) = acc.0[N + 2].overflowing_add(carry2);
-                acc.0[N + 2] = n2;
-                if of2 {
-                    let (n3, _of3) = acc.0[N + 3].overflowing_add(1);
-                    acc.0[N + 3] = n3;
-                }
-            }
-        }
+        self.fm_limbs_into::<NPLUS4>(&other, acc, 0, true);
     }
 
     #[inline]
