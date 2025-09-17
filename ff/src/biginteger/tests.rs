@@ -104,6 +104,83 @@ fn biginteger_arithmetic_test<B: BigInteger>(a: B, b: B, zero: B, max: B) {
     assert_eq!(max.mul_high(&B::from(2u64)), B::from(1u64));
 }
 
+#[test]
+fn test_i8_or_i96_mul_s160_edges() {
+    use crate::biginteger::{I8OrI96, S160, S224};
+
+    // Helper to convert S224 to BigUint reference value (unsigned magnitude) and sign
+    fn s224_to_biguint_and_sign(v: &S224) -> (num_bigint::BigUint, bool) {
+        let lo = v.magnitude_lo();
+        let hi32 = v.magnitude_hi() as u64;
+        let mut limbs = [0u64; 4];
+        limbs[0] = lo[0];
+        limbs[1] = lo[1];
+        limbs[2] = lo[2];
+        limbs[3] = hi32;
+        (
+            num_bigint::BigUint::from(crate::biginteger::BigInt::<4>(limbs)),
+            v.is_positive(),
+        )
+    }
+
+    // Case 1: small i8 * b1-only rhs
+    let k = I8OrI96::from_i8(7); // x1 = 0
+    let rhs = S160::new([0, 5], 0, true); // b0=0, b1=5, b2=0
+    let out = k * rhs;
+    let (mag_bu, sign) = s224_to_biguint_and_sign(&out);
+    let expected = num_bigint::BigUint::from(7u64) * (num_bigint::BigUint::from(5u64) << 64)
+        % (num_bigint::BigUint::from(1u8) << 224);
+    assert!(sign);
+    assert_eq!(mag_bu, expected);
+
+    // Case 2: large x with x1!=0, b2!=0, b1==0 (hits hi32 path)
+    // x = 2^80 + 3 => hi32 = 2^(80-64)=2^16, lo=3
+    let x = I8OrI96::from_i128(((1i128) << 80) + 3);
+    let rhs2 = S160::new([11, 0], 9, true); // b0=11, b1=0, b2=9
+    let out2 = x * rhs2;
+    let (mag_bu2, sign2) = s224_to_biguint_and_sign(&out2);
+    let x_bi = (num_bigint::BigUint::from(1u8) << 80) + num_bigint::BigUint::from(3u8);
+    let rhs_bi = (num_bigint::BigUint::from(9u8) << 128) + (num_bigint::BigUint::from(11u8));
+    let exp2 = x_bi * rhs_bi % (num_bigint::BigUint::from(1u8) << 224);
+    assert!(sign2);
+    assert_eq!(mag_bu2, exp2);
+
+    // Case 3: negative small i8 * nonzero rhs, zero result canonicalizes to positive
+    let k3 = I8OrI96::from_i8(-1);
+    let rhs3 = S160::zero();
+    let out3 = k3 * rhs3;
+    let (_, sign3) = s224_to_biguint_and_sign(&out3);
+    assert!(sign3);
+}
+
+#[test]
+fn test_s160_mul_s160_hi32_consistency() {
+    use crate::biginteger::{BigInt, S160};
+
+    // Spot-check a configuration that exercises the hi32 accumulation path
+    let a = S160::new([1u64 << 63, 0], 1, true); // a2=1, a0 has high bit
+    let b = S160::new([0, 1u64 << 63], 1, true); // b2=1, b1 has high bit
+    let got = &a * &b; // S160 result
+
+    // Convert S160 value to BigUint: pack [lo0, lo1, hi32] into BigInt<3>
+    let mut pack = [0u64; 3];
+    pack[0] = got.magnitude_lo()[0];
+    pack[1] = got.magnitude_lo()[1];
+    pack[2] = got.magnitude_hi() as u64;
+    let got_bu = num_bigint::BigUint::from(BigInt::<3>(pack));
+
+    // Reference BigUint modulo 2^160
+    let a_bu = (num_bigint::BigUint::from(a.magnitude_lo()[1]) << 64)
+        + num_bigint::BigUint::from(a.magnitude_lo()[0])
+        + (num_bigint::BigUint::from(a.magnitude_hi() as u64) << 128);
+    let b_bu = (num_bigint::BigUint::from(b.magnitude_lo()[1]) << 64)
+        + num_bigint::BigUint::from(b.magnitude_lo()[0])
+        + (num_bigint::BigUint::from(b.magnitude_hi() as u64) << 128);
+    let prod = (a_bu * b_bu) % (num_bigint::BigUint::from(1u8) << 160);
+
+    assert_eq!(got_bu, prod);
+}
+
 fn biginteger_shr<B: BigInteger>() {
     let mut rng = ark_std::test_rng();
     let a = B::rand(&mut rng);
