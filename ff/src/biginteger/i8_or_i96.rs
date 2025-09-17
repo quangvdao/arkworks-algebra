@@ -527,8 +527,7 @@ impl Mul<S160> for I8OrI96 {
             } else if b2_is_zero {
                 // 128-bit rhs via b1 only
                 let mut c1 = c0;
-                let r1p = mac_with_carry!(0u64, b1, k, &mut c1);
-                let r1 = adc!(r1p, 0u64, &mut c1);
+                let r1 = mac_with_carry!(0u64, b1, k, &mut c1);
                 let r2 = c1;
                 (r0, r1, r2, 0u32)
             } else {
@@ -564,9 +563,9 @@ impl Mul<S160> for I8OrI96 {
                     let mut c2 = c1;
                     let r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
 
-                    let mut carry_hi = c2;
-                    crate::biginteger::arithmetic::mac_discard(carry_hi, x1, b2, &mut carry_hi);
-                    let hi32 = carry_hi as u32;
+                    let r3_low = ((c2 as u128)
+                        + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
+                    let hi32 = (r3_low & 0xFFFF_FFFF) as u32;
                     (r0, r1, r2, hi32)
                 }
             } else if b2_is_zero {
@@ -589,9 +588,9 @@ impl Mul<S160> for I8OrI96 {
                 let mut r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
                 r2 = mac_with_carry!(r2, x1, b1, &mut c2);
 
-                let mut carry_hi = c2;
-                crate::biginteger::arithmetic::mac_discard(carry_hi, x1, b2, &mut carry_hi);
-                let hi32 = carry_hi as u32;
+                let r3_low = ((c2 as u128)
+                    + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
+                let hi32 = (r3_low & 0xFFFF_FFFF) as u32;
                 (r0, r1, r2, hi32)
             }
         };

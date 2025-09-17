@@ -206,12 +206,15 @@ impl<const N: usize> SignedBigIntHi32<N> {
             let r1 = sum1 as u64;
             let carry1 = sum1 >> 64;
 
-            // word 2 (only need low 32 bits)
+            // word 2
             let sum2 = carry1
                 + (a0 as u128) * (b2 as u128)
                 + (a1 as u128) * (b1 as u128)
                 + (a2 as u128) * (b0 as u128);
             let r2 = sum2 as u64;
+            let _carry2 = (sum2 >> 64) as u64;
+
+            // For a 160-bit result, the head (bits 128..159) is the low 32 bits of word2.
             let hi = (r2 & 0xFFFF_FFFF) as u32;
             let mut lo = [0u64; N];
             lo[0] = r0;
