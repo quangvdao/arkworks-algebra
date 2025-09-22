@@ -102,8 +102,8 @@ fn test_step_continuity() {
     // Check continuity between steps
     for i in 0..steps.steps.len() - 1 {
         assert_eq!(
-            steps.steps[i].rho_after,
-            steps.steps[i + 1].rho_before,
+            steps.steps[i].rho_after(),
+            steps.steps[i + 1].rho_before(),
             "Step continuity broken at step {}",
             i
         );
@@ -111,7 +111,7 @@ fn test_step_continuity() {
 
     // Check final step leads to result
     if let Some(last_step) = steps.steps.last() {
-        assert_eq!(last_step.rho_after, steps.result);
+        assert_eq!(last_step.rho_after(), steps.result);
     }
 }
 
@@ -125,9 +125,9 @@ fn test_squaring_correctness() {
 
     // Verify each squaring operation: a_i = a_{i-1}^2
     for step in &steps.steps {
-        let expected_square = step.a_prev * step.a_prev;
+        let expected_square = step.a_prev() * step.a_prev();
         assert_eq!(
-            step.a_curr, expected_square,
+            step.a_curr(), expected_square,
             "Squaring incorrect at step {}",
             step.step_index
         );

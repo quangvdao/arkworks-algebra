@@ -2,149 +2,208 @@
 use ark_bn254::{Fq, Fq12};
 use ark_ff::{Field, One, Zero};
 
-/// Flatten Fq12 to 12 base-field coefficients for a(X)=Σ c_i X^i, X=w,
-/// with the relation g(X) = X^12 - 18 X^6 + 82.
-///
-/// The BN254 Fq12 field is constructed as a tower extension:
-/// - Fq2 = Fq[u]/(u^2 + 1)
-/// - Fq6 = Fq2[v]/(v^3 - (9 + u))
-/// - Fq12 = Fq6[w]/(w^2 - v)
-///
-/// This function maps an Fq12 element to its polynomial representation
-/// in Fq[X] where X = w, using the mapping:
-/// (x + y·u)·w^k = (x - 9y)·w^k + y·w^{k+6}, for k∈{0..5}.
-/// @TODO(markosg04) provide proof?
+/// Constant for the tower extension mapping
+const NINE: u64 = 9;
+
+/// Newtype wrapper for degree-12 polynomial coefficients
+#[derive(Clone, Debug, Default)]
+pub struct Poly12([Fq; 12]);
+
+impl Poly12 {
+    pub fn new(coeffs: [Fq; 12]) -> Self {
+        Self(coeffs)
+    }
+
+    pub fn coeffs(&self) -> &[Fq; 12] {
+        &self.0
+    }
+
+    pub fn coeffs_mut(&mut self) -> &mut [Fq; 12] {
+        &mut self.0
+    }
+
+    pub fn to_vec(&self) -> Vec<Fq> {
+        self.0.to_vec()
+    }
+
+    /// Evaluate at a point using Horner's method
+    pub fn eval(&self, r: &Fq) -> Fq {
+        self.0.iter().rev().fold(Fq::zero(), |acc, c| acc * r + c)
+    }
+}
+
+/// Tower basis mapping for Fq12 -> polynomial conversion
+struct TowerBasis {
+    /// Maps basis elements to power indices: [(element, power_of_w)]
+    mappings: [(usize, usize, usize); 6], // (c0/c1, inner_idx, w_power)
+}
+
+impl TowerBasis {
+    const fn new() -> Self {
+        Self {
+            mappings: [
+                (0, 0, 0), // a.c0.c0 → w^0
+                (0, 1, 2), // a.c0.c1 → w^2
+                (0, 2, 4), // a.c0.c2 → w^4
+                (1, 0, 1), // a.c1.c0 → w^1
+                (1, 1, 3), // a.c1.c1 → w^3
+                (1, 2, 5), // a.c1.c2 → w^5
+            ],
+        }
+    }
+
+    fn apply(&self, a: &Fq12) -> Poly12 {
+        let nine = Fq::from(NINE);
+        let mut coeffs = [Fq::zero(); 12];
+
+        for &(outer, inner, w_power) in &self.mappings {
+            let fp2 = match (outer, inner) {
+                (0, 0) => &a.c0.c0,
+                (0, 1) => &a.c0.c1,
+                (0, 2) => &a.c0.c2,
+                (1, 0) => &a.c1.c0,
+                (1, 1) => &a.c1.c1,
+                (1, 2) => &a.c1.c2,
+                _ => unreachable!(),
+            };
+
+            let (x, y) = (fp2.c0, fp2.c1);
+            // Apply: (x + y·u)·w^k = (x - 9y)·w^k + y·w^{k+6}
+            coeffs[w_power] += x - nine * y;
+            coeffs[w_power + 6] += y;
+        }
+
+        Poly12::new(coeffs)
+    }
+}
+
+static TOWER_BASIS: TowerBasis = TowerBasis::new();
+
+/// Convert Fq12 to polynomial representation
 pub fn fq12_to_poly12_coeffs(a: &Fq12) -> [Fq; 12] {
-    let nine = Fq::from(9u64);
-    let mut c = [Fq::zero(); 12];
-
-    // (term, k) pairs mapping Fq12 basis elements to powers of w:
-    // 1, v, v^2, w, v·w, v^2·w  ↔  w^0, w^2, w^4, w^1, w^3, w^5
-    let terms = [
-        (&a.c0.c0, 0usize), // 1 → w^0
-        (&a.c0.c1, 2usize), // v → w^2
-        (&a.c0.c2, 4usize), // v^2 → w^4
-        (&a.c1.c0, 1usize), // w → w^1
-        (&a.c1.c1, 3usize), // v·w → w^3
-        (&a.c1.c2, 5usize), // v^2·w → w^5
-    ];
-
-    for (fp2, k) in terms {
-        let x = fp2.c0; // coefficient of 1 in Fp2
-        let y = fp2.c1; // coefficient of u in Fp2 (with u^2 = -1)
-                        // Apply the mapping: (x + y·u)·w^k = (x - 9y)·w^k + y·w^{k+6}
-        c[k] += x - nine * y;
-        c[k + 6] += y;
-    }
-    c
+    TOWER_BASIS.apply(a).0
 }
 
-/// Evaluate g(X) = X^12 - 18 X^6 + 82 at a given point r.
+/// The minimal polynomial g(X) = X^12 - 18 X^6 + 82
+struct MinimalPolynomial;
+
+impl MinimalPolynomial {
+    const COEFF_0: u64 = 82;
+    const COEFF_6: i64 = -18;
+
+    /// Evaluate g(X) at point r
+    fn eval(r: &Fq) -> Fq {
+        let r6 = (r.square() * r).square(); // r^6 = (r^2 * r)^2
+        let r12 = r6.square();
+        r12 - Fq::from(18u64) * r6 + Fq::from(Self::COEFF_0)
+    }
+
+    /// Get coefficients as a vector
+    fn coeffs() -> Vec<Fq> {
+        let mut g = vec![Fq::zero(); 13];
+        g[0] = Fq::from(Self::COEFF_0);
+        g[6] = -Fq::from(18u64);
+        g[12] = Fq::one();
+        g
+    }
+}
+
+/// Evaluate g(X) = X^12 - 18 X^6 + 82 at a given point r
 pub fn g_eval(r: &Fq) -> Fq {
-    let r2 = r.square(); // r^2
-    let r3 = r2 * r; // r^3
-    let r6 = r3.square(); // r^6
-    let r12 = r6.square(); // r^12
-    r12 - (Fq::from(18u64) * r6) + Fq::from(82u64)
+    MinimalPolynomial::eval(r)
 }
 
-/// Horner evaluation for arbitrary-degree polynomial.
+/// Horner evaluation for arbitrary-degree polynomial
 pub fn eval_poly_vec(coeffs: &[Fq], r: &Fq) -> Fq {
-    let mut acc = Fq::zero();
-    for &c in coeffs.iter().rev() {
-        acc *= r;
-        acc += c;
-    }
-    acc
+    coeffs.iter().rev().fold(Fq::zero(), |acc, c| acc * r + c)
 }
 
-/// Add polynomial b to polynomial a in place.
+/// Generic polynomial operation in place
+fn poly_op_in_place<F>(a: &mut Vec<Fq>, b: &[Fq], op: F)
+where
+    F: Fn(&mut Fq, Fq),
+{
+    if b.len() > a.len() {
+        a.resize(b.len(), Fq::zero());
+    }
+    b.iter().enumerate().for_each(|(i, &coeff)| op(&mut a[i], coeff));
+}
+
+/// Add polynomial b to polynomial a in place
 pub fn poly_add_in_place(a: &mut Vec<Fq>, b: &[Fq]) {
-    if b.len() > a.len() {
-        a.resize(b.len(), Fq::zero());
-    }
-    for i in 0..b.len() {
-        a[i] += b[i];
-    }
+    poly_op_in_place(a, b, |a, b| *a += b);
 }
 
-/// Subtract polynomial b from polynomial a in place.
+/// Subtract polynomial b from polynomial a in place
 pub fn poly_sub_in_place(a: &mut Vec<Fq>, b: &[Fq]) {
-    if b.len() > a.len() {
-        a.resize(b.len(), Fq::zero());
-    }
-    for i in 0..b.len() {
-        a[i] -= b[i];
-    }
+    poly_op_in_place(a, b, |a, b| *a -= b);
 }
 
-/// Multiply two polynomials using convolution.
+/// Multiply two polynomials using convolution
 pub fn poly_mul(a: &[Fq], b: &[Fq]) -> Vec<Fq> {
     if a.is_empty() || b.is_empty() {
         return vec![];
     }
+
     let mut out = vec![Fq::zero(); a.len() + b.len() - 1];
-    for i in 0..a.len() {
-        for j in 0..b.len() {
-            out[i + j] += a[i] * b[j];
-        }
-    }
+    a.iter().enumerate().for_each(|(i, &ai)| {
+        b.iter().enumerate().for_each(|(j, &bj)| {
+            out[i + j] += ai * bj;
+        })
+    });
     out
 }
 
-/// Polynomial long division by a monic divisor.
-pub fn poly_div_rem_monic(mut dividend: Vec<Fq>, g: &[Fq]) -> (Vec<Fq>, Vec<Fq>) {
-    assert!(!g.is_empty(), "divisor g must be non-empty");
+/// Polynomial long division by a monic divisor
+pub fn poly_div_rem_monic(mut dividend: Vec<Fq>, divisor: &[Fq]) -> (Vec<Fq>, Vec<Fq>) {
+    assert!(!divisor.is_empty(), "divisor must be non-empty");
     assert!(
-        g.last().unwrap().is_one(),
-        "divisor g must be monic (leading coefficient = 1)"
+        divisor.last().unwrap().is_one(),
+        "divisor must be monic (leading coefficient = 1)"
     );
 
-    if dividend.is_empty() || dividend.len() < g.len() {
+    if dividend.is_empty() || dividend.len() < divisor.len() {
         return (vec![], dividend);
     }
 
-    let n = dividend.len() - 1;
-    let m = g.len() - 1; // deg g
-    let mut q = vec![Fq::zero(); n - m + 1];
+    let deg_dividend = dividend.len() - 1;
+    let deg_divisor = divisor.len() - 1;
+    let mut quotient = vec![Fq::zero(); deg_dividend - deg_divisor + 1];
 
-    for k in (m..=n).rev() {
-        let lead = dividend[k]; // since g is monic, this is the quotient coefficient
-        q[k - m] = lead;
-        if lead.is_zero() {
-            continue;
-        }
-        // subtract lead * x^{k-m} * g from dividend
-        for j in 0..=m {
-            dividend[k - m + j] -= lead * g[j];
+    for k in (deg_divisor..=deg_dividend).rev() {
+        let coeff = dividend[k];
+        quotient[k - deg_divisor] = coeff;
+
+        if !coeff.is_zero() {
+            // Subtract coeff * x^{k-deg_divisor} * divisor from dividend
+            (0..=deg_divisor).for_each(|j| {
+                dividend[k - deg_divisor + j] -= coeff * divisor[j];
+            });
         }
     }
 
-    // trim trailing zeros from remainder
-    while let Some(true) = dividend.last().map(|c| c.is_zero()) {
+    // Trim trailing zeros from remainder
+    while dividend.last() == Some(&Fq::zero()) {
         dividend.pop();
     }
 
-    (q, dividend)
+    (quotient, dividend)
 }
 
-/// Build the coefficients for g(X) = X^12 - 18 X^6 + 82.
+/// Build the coefficients for g(X) = X^12 - 18 X^6 + 82
 pub fn g_coeffs() -> Vec<Fq> {
-    let mut g = vec![Fq::zero(); 13];
-    g[0] = Fq::from(82u64);
-    g[6] = -Fq::from(18u64);
-    g[12] = Fq::one();
-    g
+    MinimalPolynomial::coeffs()
 }
 
-/// Convert Fq12 polynomial coefficients to multilinear evaluations by padding to 16 elements.=
+/// Convert Fq12 polynomial coefficients to multilinear evaluations by padding to 16 elements
 pub fn to_multilinear_evals(coeffs: &[Fq; 12]) -> Vec<Fq> {
-    let mut evals = coeffs.to_vec();
+    let mut evals = Vec::with_capacity(16);
+    evals.extend_from_slice(coeffs);
     evals.resize(16, Fq::zero());
     evals
 }
 
+/// Convert Fq12 directly to multilinear evaluations
 pub fn fq12_to_multilinear_evals(a: &Fq12) -> Vec<Fq> {
-    let coeffs = fq12_to_poly12_coeffs(a);
-    to_multilinear_evals(&coeffs)
+    to_multilinear_evals(&fq12_to_poly12_coeffs(a))
 }
