@@ -1,6 +1,6 @@
 use ark_bn254::{Fq, Fq12};
 use ark_ff::BigInteger;
-use ark_ff::{Field, One, PrimeField, UniformRand};
+use ark_ff::{Field, PrimeField, UniformRand};
 use ark_std::test_rng;
 use jolt_optimizations::steps::pow_with_steps_le;
 
@@ -50,14 +50,14 @@ fn test_debug_trace() {
         );
 
         println!("  Squaring: a_{} = a_{}^2", i + 1, i);
-        println!("    a_{} = {:?}", i, step.a_prev);
-        println!("    a_{} = {:?}", i + 1, step.a_curr);
+        println!("    a_{} = {:?}", i, step.a_prev());
+        println!("    a_{} = {:?}", i + 1, step.a_curr());
 
         // Verify squaring
-        let expected_square = step.a_prev * step.a_prev;
+        let expected_square = step.a_prev() * step.a_prev();
         println!(
             "    Verification: a_curr == a_prev^2? {}",
-            if step.a_curr == expected_square {
+            if step.a_curr() == expected_square {
                 "✓"
             } else {
                 "✗"
@@ -65,7 +65,7 @@ fn test_debug_trace() {
         );
 
         println!("  Accumulator update:");
-        println!("    rho_before = {:?}", step.rho_before);
+        println!("    rho_before = {:?}", step.rho_before());
 
         if step.bit_value {
             println!("    Bit is 1, so: rho_after = rho_before * a_curr");
@@ -73,17 +73,17 @@ fn test_debug_trace() {
             println!("    Bit is 0, so: rho_after = rho_before (unchanged)");
         }
 
-        println!("    rho_after = {:?}", step.rho_after);
+        println!("    rho_after = {:?}", step.rho_after());
 
         // Verify accumulator update
         let expected_rho = if step.bit_value {
-            step.rho_before * step.a_curr
+            step.rho_before() * step.a_curr()
         } else {
-            step.rho_before
+            step.rho_before()
         };
         println!(
             "    Verification: rho_after correct? {}",
-            if step.rho_after == expected_rho {
+            if step.rho_after() == expected_rho {
                 "✓"
             } else {
                 "✗"
