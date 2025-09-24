@@ -227,6 +227,15 @@ fn mul_small_bench(c: &mut Criterion) {
     });
 
     // Reduction benchmarks
+    group.bench_function("montgomery_reduce_in_place core (L=8)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            let mut x = bigint_2n_s[i];
+            criterion::black_box(Fr::montgomery_reduce_in_place::<8>(&mut x))
+        })
+    });
+
     group.bench_function("from_montgomery_reduce (L=2N)", |bench| {
         let mut i = 0;
         bench.iter(|| {
@@ -235,29 +244,53 @@ fn mul_small_bench(c: &mut Criterion) {
         })
     });
 
-    // group.bench_function("from_unchecked_nplus1 (Barrett N+1)", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         criterion::black_box(Fr::from_unchecked_nplus1::<5>(bigint_nplus1_s[i]))
-    //     })
-    // });
+    // L=9 inputs: derive by zero-extending L=8 inputs
+    let bigint_9_s = bigint_2n_s
+        .iter()
+        .map(|b8| ark_ff::BigInt::<9>::zero_extend_from::<8>(b8))
+        .collect::<Vec<_>>();
 
-    // group.bench_function("from_unchecked_nplus2 (Barrett N+2)", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         criterion::black_box(Fr::from_unchecked_nplus2::<5, 6>(bigint_nplus2_s[i]))
-    //     })
-    // });
+    group.bench_function("montgomery_reduce_in_place core (L=9)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            let mut x = bigint_9_s[i];
+            criterion::black_box(Fr::montgomery_reduce_in_place::<9>(&mut x))
+        })
+    });
 
-    // group.bench_function("from_unchecked_nplus3 (Barrett N+3)", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         criterion::black_box(Fr::from_unchecked_nplus3::<5, 6, 7>(bigint_nplus3_s[i]))
-    //     })
-    // });
+    group.bench_function("from_montgomery_reduce (L=9)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(Fr::from_montgomery_reduce::<9, 5>(bigint_9_s[i]))
+        })
+    });
+
+    // Barrett reductions
+    group.bench_function("from_barrett_reduce (L=5)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(Fr::from_barrett_reduce::<5, 5>(bigint_nplus1_s[i]))
+        })
+    });
+
+    group.bench_function("from_barrett_reduce (L=6)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(Fr::from_barrett_reduce::<6, 5>(bigint_nplus2_s[i]))
+        })
+    });
+
+    group.bench_function("from_barrett_reduce (L=7)", |bench| {
+        let mut i = 0;
+        bench.iter(|| {
+            i = (i + 1) % SAMPLES;
+            criterion::black_box(Fr::from_barrett_reduce::<7, 5>(bigint_nplus3_s[i]))
+        })
+    });
 
     // Linear combination benchmarks
     group.bench_function("linear_combination_u64 (2 terms)", |bench| {

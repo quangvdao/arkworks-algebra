@@ -1312,34 +1312,31 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// Treats `limbs` as `[lo[0..N), hi[0..N), extra...]` and updates only the high half.
     /// Returns the final carry-out (0 or 1) from the top of the reduction.
     #[inline(always)]
+    #[unroll_for_loops(12)]
     pub fn montgomery_reduce_in_place<const L: usize>(limbs: &mut BigInt<L>) -> u64 {
         debug_assert!(L >= 2 * N, "montgomery_reduce_in_place requires L >= 2N");
 
-        // Copy the leading 2N limbs into local halves to mirror the canonical subroutine.
-        let mut lo = [0u64; N];
-        let mut hi = [0u64; N];
-        lo.copy_from_slice(&limbs.0[0..N]);
-        hi.copy_from_slice(&limbs.0[N..(N + N)]);
+        // Work directly on the buffer to avoid copies: split into lo and hi views.
+        let (lo, rest) = limbs.0.split_at_mut(N);
+        let hi = &mut rest[..N];
 
         // Montgomery reduction (canonical form)
         let mut carry2 = 0u64;
-        crate::const_for!((i in 0..N) {
+        for i in 0..N {
             let tmp = lo[i].wrapping_mul(T::INV);
             let mut carry;
             mac!(lo[i], tmp, T::MODULUS.0[0], &mut carry);
-            crate::const_for!((j in 1..N) {
+            for j in 1..N {
                 let k = i + j;
                 if k >= N {
-                    hi[k - N] = mac_with_carry!(hi[k - N], tmp, T::MODULUS.0[j], &mut carry);
-                }  else {
+                    let idx = k - N;
+                    hi[idx] = mac_with_carry!(hi[idx], tmp, T::MODULUS.0[j], &mut carry);
+                } else {
                     lo[k] = mac_with_carry!(lo[k], tmp, T::MODULUS.0[j], &mut carry);
                 }
-            });
+            }
             hi[i] = adc!(hi[i], carry, &mut carry2);
-        });
-
-        // Write the reduced high half back into the buffer; low half is discarded by callers.
-        limbs.0[N..(N + N)].copy_from_slice(&hi);
+        }
 
         carry2
     }
