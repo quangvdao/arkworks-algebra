@@ -901,27 +901,55 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         Self::new_unchecked(acc)
     }
 
-    /// Montgomery reduction of a BigInt to a field element (compute a * R^{-1} mod p).
+    /// Montgomery reduction for arbitrary input width L >= 2N.
     ///
-    /// Need to specify the number of limbs `L` in the BigInt, where `L > N`.
+    /// Runs exactly N Montgomery steps (i = 0..N-1) over the L-limb buffer to compute
+    /// t' = (unreduced + q * MODULUS) / R, where R = b^N. The remaining (L - N) limbs
+    /// store t' in base-b. For L > 2N, we first fold the entire tail (indices N..L) down
+    /// to an N-limb accumulator using the N+1 Barrett reducer (interpreting the tail as a
+    /// base-b number), place that as the high N limbs to form a 2N-limb buffer, and then
+    /// perform the standard N-step Montgomery reduction on that 2N-limb buffer.
+    ///
+    /// Preconditions:
+    /// - L >= 2N (buffer must be large enough to perform N steps safely)
+    ///
+    /// Computes: unreduced * R^{-1} mod MODULUS.
     #[inline(always)]
-    pub fn from_montgomery_reduce<const L: usize>(unreduced: BigInt<L>) -> Self {
-        debug_assert!(
-            L > N,
-            "from_montgomery_reduce requires L > N for a reduction to be necessary"
-        );
-        let mut limbs = unreduced;
-        let steps = L - N;
+    pub fn from_montgomery_reduce<const L: usize, const NPLUS1: usize>(
+        unreduced: BigInt<L>,
+    ) -> Self {
+        debug_assert!(NPLUS1 == N + 1);
+        debug_assert!(L >= N + N, "from_montgomery_reduce_var requires L >= 2N");
 
-        let (carry, _steps_done) = Self::montgomery_steps_in_place::<L>(&mut limbs, steps);
+        let mut limbs = unreduced; // reuse storage for the buffer
 
-        // The result is in the upper N limbs of the buffer.
+        // If L > 2N, first fold the extra high limbs down.
+        if L > 2 * N {
+            // Fold the tail (indices N..L) into an N-limb accumulator via Barrett.
+            let mut acc = BigInt::<N>::zero();
+            let mut i = L;
+            while i > N {
+                i -= 1;
+                let c2 = nplus1_pair_low_to_bigint::<N, NPLUS1>((limbs.0[i], acc.0));
+                acc = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c2);
+            }
+
+            // Recompose buffer: [low_N | acc | zeros...]
+            limbs.0[N..(N + N)].copy_from_slice(&acc.0);
+            let mut j = 2 * N;
+            while j < L {
+                limbs.0[j] = 0;
+                j += 1;
+            }
+        }
+
+        // Phase 2: run exactly N Montgomery steps on the 2N-limb buffer.
+        let carry = Self::montgomery_reduce_in_place::<L>(&mut limbs);
+
+        // Extract result and finalize.
         let mut result_limbs = [0u64; N];
-        result_limbs.copy_from_slice(&limbs.0[steps..]);
-
+        result_limbs.copy_from_slice(&limbs.0[N..(N + N)]);
         let mut result = Self::new_unchecked(BigInt::<N>(result_limbs));
-
-        // Final conditional subtraction to bring the result into the canonical range.
         if T::MODULUS_HAS_SPARE_BIT {
             result.subtract_modulus();
         } else {
@@ -945,7 +973,7 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// via a barrett reduction.
     #[inline]
     pub fn from_unchecked_nplus2<const NPLUS1: usize, const NPLUS2: usize>(
-        element: BigInt<{ NPLUS2 }>,
+        element: BigInt<NPLUS2>,
     ) -> Self {
         debug_assert!(NPLUS1 == N + 1);
         debug_assert!(NPLUS2 == N + 2);
@@ -1224,45 +1252,58 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// Keep this for now for backwards compatibility.
     #[inline(always)]
     pub fn montgomery_reduce_2n<const TWON: usize>(input: BigInt<TWON>) -> Self {
-        Self::from_montgomery_reduce::<TWON>(input)
+        debug_assert!(TWON == 2 * N, "montgomery_reduce_2n requires TWON == 2N");
+        let mut limbs = input;
+        let carry = Self::montgomery_reduce_in_place::<TWON>(&mut limbs);
+
+        // Extract the upper N limbs after exactly N REDC steps
+        let mut result_limbs = [0u64; N];
+        result_limbs.copy_from_slice(&limbs.0[N..]);
+
+        let mut result = Self::new_unchecked(BigInt::<N>(result_limbs));
+        if T::MODULUS_HAS_SPARE_BIT {
+            result.subtract_modulus();
+        } else {
+            result.subtract_modulus_with_carry(carry != 0);
+        }
+        result
     }
 
-    /// Perform one Montgomery reduction step at position `i` over a contiguous limb buffer.
-    /// Operates on a `BigInt<L>` that is treated as `[lo[0..N), hi[0..N), extra...]`.
-    /// Precondition (debug-asserted): `L >= N + i + 1` so all indices accessed are in-bounds.
-    /// Returns the carry-out from the top of this step.
+    /// Perform exactly N Montgomery reduction steps over the leading 2N limbs of `limbs`,
+    /// using the canonical REDC subroutine from `mul_without_cond_subtract`.
+    /// Treats `limbs` as `[lo[0..N), hi[0..N), extra...]` and updates only the high half.
+    /// Returns the final carry-out (0 or 1) from the top of the reduction.
     #[inline(always)]
-    pub fn montgomery_step_once_at<const L: usize>(limbs: &mut BigInt<L>, i: usize) -> u64 {
-        debug_assert!(L >= N + i + 1, "montgomery_step_once_at: L too small for step i");
-        let limbs_slice = &mut limbs.0;
-        // Compute tmp = limbs[i] * INV (mod 2^64)
-        let tmp = limbs_slice[i].wrapping_mul(T::INV);
-        // Accumulate tmp * MODULUS into columns starting at i
-        let mut carry = 0u64;
-        fa::mac_discard(limbs_slice[i], tmp, T::MODULUS.0[0], &mut carry);
-        for j in 1..N {
-            let k = i + j;
-            limbs_slice[k] = mac_with_carry!(limbs_slice[k], tmp, T::MODULUS.0[j], &mut carry);
-        }
-        // Propagate the final carry into limbs[i + N]
-        fa::adc(&mut limbs_slice[i + N], carry, 0)
-    }
+    pub fn montgomery_reduce_in_place<const L: usize>(limbs: &mut BigInt<L>) -> u64 {
+        debug_assert!(L >= 2 * N, "montgomery_reduce_in_place requires L >= 2N");
 
-    /// Perform up to `steps` Montgomery steps starting at i = 0 over an `L`-limb buffer.
-    /// Returns (last_carry, steps_done). In debug, asserts `L >= N + steps`; in release, saturates.
-    #[inline(always)]
-    pub fn montgomery_steps_in_place<const L: usize>(
-        limbs: &mut BigInt<L>,
-        steps: usize,
-    ) -> (u64, usize) {
-        let max_steps = L.saturating_sub(N);
-        debug_assert!(steps <= max_steps, "steps exceed capacity: L < N + steps");
-        let steps_done = core::cmp::min(steps, max_steps);
-        let mut last_carry = 0u64;
-        for i in 0..steps_done {
-            last_carry = Self::montgomery_step_once_at::<L>(limbs, i);
-        }
-        (last_carry, steps_done)
+        // Copy the leading 2N limbs into local halves to mirror the canonical subroutine.
+        let mut lo = [0u64; N];
+        let mut hi = [0u64; N];
+        lo.copy_from_slice(&limbs.0[0..N]);
+        hi.copy_from_slice(&limbs.0[N..(N + N)]);
+
+        // Montgomery reduction (canonical form)
+        let mut carry2 = 0u64;
+        crate::const_for!((i in 0..N) {
+            let tmp = lo[i].wrapping_mul(T::INV);
+            let mut carry;
+            mac!(lo[i], tmp, T::MODULUS.0[0], &mut carry);
+            crate::const_for!((j in 1..N) {
+                let k = i + j;
+                if k >= N {
+                    hi[k - N] = mac_with_carry!(hi[k - N], tmp, T::MODULUS.0[j], &mut carry);
+                }  else {
+                    lo[k] = mac_with_carry!(lo[k], tmp, T::MODULUS.0[j], &mut carry);
+                }
+            });
+            hi[i] = adc!(hi[i], carry, &mut carry2);
+        });
+
+        // Write the reduced high half back into the buffer; low half is discarded by callers.
+        limbs.0[N..(N + N)].copy_from_slice(&hi);
+
+        carry2
     }
 
     #[inline(always)]
@@ -1856,5 +1897,28 @@ mod test {
 
         let sign_is_positive = sign != Sign::Minus;
         (sign_is_positive, limbs)
+    }
+
+    #[test]
+    fn test_from_montgomery_reduce_paths_l8_l9_match_field_mul() {
+        let mut rng = test_rng();
+        for _ in 0..200 {
+            let a = Fr::rand(&mut rng);
+            let b = Fr::rand(&mut rng);
+
+            let expected = a * b;
+
+            // Compute 8-limb raw product of Montgomery residues
+            let prod8 = a.0.mul_trunc::<4, 8>(&b.0);
+
+            // Reduce via Montgomery reduction with L = 8
+            let alt8 = Fr::montgomery_reduce_2n::<8>(prod8);
+            assert_eq!(alt8, expected, "from_montgomery_reduce L=8 mismatch");
+
+            // Zero-extend to 9 limbs and reduce with L = 9
+            let prod9 = ark_test_curves::ark_ff::BigInt::<9>::zero_extend_from::<8>(&prod8);
+            let alt9 = Fr::from_montgomery_reduce::<9, 5>(prod9);
+            assert_eq!(alt9, expected, "from_montgomery_reduce L=9 mismatch");
+        }
     }
 }

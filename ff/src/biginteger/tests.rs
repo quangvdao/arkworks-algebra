@@ -1114,7 +1114,6 @@ pub mod tests {
         let mut b = BigInt::<4>::new([u64::MAX; 4]);
         for i in 0..4 { a.0[i] >>= 1; b.0[i] >>= 1; }
         // P = 4: result should match BigUint addition modulo 2^256
-        let r = a.add_trunc::<4, 4>(&b);
         // add_assign_trunc debug-overflow behavior cannot be reliably asserted in this
         // environment without std; we validate the non-mutating truncated result above.
 

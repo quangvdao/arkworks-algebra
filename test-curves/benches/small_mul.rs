@@ -231,7 +231,7 @@ fn mul_small_bench(c: &mut Criterion) {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(Fr::from_montgomery_reduce::<8>(bigint_2n_s[i]))
+            criterion::black_box(Fr::from_montgomery_reduce::<8, 5>(bigint_2n_s[i]))
         })
     });
 
