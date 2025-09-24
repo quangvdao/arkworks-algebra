@@ -227,11 +227,11 @@ fn mul_small_bench(c: &mut Criterion) {
     });
 
     // Reduction benchmarks
-    group.bench_function("montgomery_reduce_2n", |bench| {
+    group.bench_function("from_montgomery_reduce (L=2N)", |bench| {
         let mut i = 0;
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
-            criterion::black_box(Fr::montgomery_reduce_2n::<8>(bigint_2n_s[i]))
+            criterion::black_box(Fr::from_montgomery_reduce::<8>(bigint_2n_s[i]))
         })
     });
 
@@ -269,19 +269,6 @@ fn mul_small_bench(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("linear_combination_u64_2 (optimized)", |bench| {
-        let mut i = 0;
-        bench.iter(|| {
-            i = (i + 1) % SAMPLES;
-            criterion::black_box(Fr::linear_combination_u64_2::<5>(
-                &a_s[i],
-                b_u64_s[i],
-                &c_s[i],
-                b_u64_s[(i + 1) % SAMPLES],
-            ))
-        })
-    });
-
     group.bench_function("linear_combination_u64 (4 terms)", |bench| {
         let mut i = 0;
         bench.iter(|| {
@@ -293,21 +280,6 @@ fn mul_small_bench(c: &mut Criterion) {
                 (c_s[(i + 3) % SAMPLES], b_u64_s[(i + 3) % SAMPLES]),
             ];
             criterion::black_box(Fr::linear_combination_u64::<5>(&pairs))
-        })
-    });
-
-    group.bench_function("linear_combination_u64_3 (optimized)", |bench| {
-        let mut i = 0;
-        bench.iter(|| {
-            i = (i + 1) % SAMPLES;
-            criterion::black_box(Fr::linear_combination_u64_3::<5>(
-                &a_s[i],
-                b_u64_s[i],
-                &c_s[i],
-                b_u64_s[(i + 1) % SAMPLES],
-                &a_s[(i + 2) % SAMPLES],
-                b_u64_s[(i + 2) % SAMPLES],
-            ))
         })
     });
 
