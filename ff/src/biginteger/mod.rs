@@ -15,7 +15,7 @@ use ark_std::{
     io::{Read, Write},
     ops::{
         BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl, ShlAssign, Shr,
-        ShrAssign,
+        ShrAssign, Add, Sub, AddAssign, SubAssign,
     },
     rand::{
         distributions::{Distribution, Standard},
@@ -299,114 +299,93 @@ impl<const N: usize> BigInt<N> {
         self.0[N - 1].leading_zeros()
     }
 
+    /// Truncated-width addition: compute self + other into P limbs.
+    ///
+    /// - Semantics: returns the low P limbs of the sum; higher limbs are discarded.
+    /// - Precondition (debug-only): right operand width M must be <= P.
+    /// - Debug contract: panics in debug if an addition carry would spill beyond P limbs.
+    #[inline]
+    pub fn add_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
+        debug_assert!(M <= P, "add_trunc: right operand wider than result width P");
+        let mut acc = BigInt::<P>::zero();
+        let copy_len = core::cmp::min(P, N);
+        acc.0[..copy_len].copy_from_slice(&self.0[..copy_len]);
+        acc.add_assign_trunc::<M>(other);
+        acc
+    }
+
+    /// Truncated-width subtraction: compute self - other into P limbs.
+    ///
+    /// - Semantics: returns the low P limbs of the difference; higher borrow is discarded.
+    /// - Precondition (debug-only): right operand width M must be <= P.
+    /// - Debug contract: panics in debug if a borrow would spill beyond P limbs.
+    #[inline]
+    pub fn sub_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
+        debug_assert!(M <= P, "sub_trunc: right operand wider than result width P");
+        let mut acc = BigInt::<P>::zero();
+        let copy_len = core::cmp::min(P, N);
+        acc.0[..copy_len].copy_from_slice(&self.0[..copy_len]);
+        acc.sub_assign_trunc::<M>(other);
+        acc
+    }
+
     /// Truncated-width multiplication: compute self * other and fit into P limbs; overflow is ignored.
     #[inline]
     pub fn mul_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
         let mut res = BigInt::<P>::zero();
-        let i_limit = core::cmp::min(N, P);
-        for i in 0..i_limit {
-            let mut carry = 0u64;
-            let j_limit = core::cmp::min(M, P - i);
-            for j in 0..j_limit {
-                res.0[i + j] = mac_with_carry!(res.0[i + j], self.0[i], other.0[j], &mut carry);
-            }
-            if i + j_limit < P {
-                let (new_val, _of) = res.0[i + j_limit].overflowing_add(carry);
-                res.0[i + j_limit] = new_val;
-            }
-        }
+        // Use core fused multiply engine specialized on M for unrolling
+        self.fm_limbs_into::<M, P>(&other.0, &mut res, false);
         res
     }
 
-    /// Truncated-width addition: compute self + other and fit into P limbs; overflow is ignored.
+    /// Truncated-width addition that mutates self: self += other, keeping N limbs (self's width).
+    ///
+    /// - Semantics: computes (self + other) mod 2^(64*N).
+    /// - Precondition (debug-only): right operand width M must be <= N.
+    /// - Debug contract: panics in debug if a carry would spill beyond N limbs.
     #[inline]
-    pub fn add_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
-        let mut res = BigInt::<P>::zero();
+    #[unroll_for_loops(9)]
+    pub fn add_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
+        debug_assert!(M <= N, "add_assign_trunc: right operand wider than self width N");
         let mut carry = 0u64;
-
-        // Add all limbs up to the result size P, using 0 for missing limbs
-        let min_size = core::cmp::min(N, M);
-        let max_size = core::cmp::max(N, M);
-
-        // Add corresponding limbs from both BigInts
-        for i in 0..core::cmp::min(min_size, P) {
-            res.0[i] = adc!(self.0[i], other.0[i], &mut carry);
+        for i in 0..N {
+            let rhs = if i < M { other.0[i] } else { 0 };
+            self.0[i] = adc!(self.0[i], rhs, &mut carry);
         }
-
-        // Handle remaining limbs from the larger BigInt
-        for i in min_size..core::cmp::min(max_size, P) {
-            let a = if i < N { self.0[i] } else { 0 };
-            let b = if i < M { other.0[i] } else { 0 };
-            res.0[i] = adc!(a, b, &mut carry);
-        }
-
-        // Propagate any remaining carry to unused limbs within P
-        let mut i = max_size;
-        while carry != 0 && i < P {
-            res.0[i] = adc!(res.0[i], 0, &mut carry);
-            i += 1;
-        }
-
-        res
+        debug_assert!(carry == 0, "add_assign_trunc overflow: carry beyond N limbs");
     }
 
-    /// Truncated-width subtraction: compute self - other and fit into P limbs; borrow is ignored beyond P limbs.
+    /// Truncated-width subtraction that mutates self: self -= other, keeping N limbs (self's width).
+    ///
+    /// Semantics: computes (self - other) mod 2^(64*N).
+    /// Precondition (debug-only): right operand width M must be <= N.
+    /// Debug contract: panics in debug if a borrow would spill beyond N limbs.
     #[inline]
-    pub fn sub_trunc<const M: usize, const P: usize>(&self, other: &BigInt<M>) -> BigInt<P> {
-        let mut res = BigInt::<P>::zero();
-        let mut borrow = false;
-
-        for i in 0..P {
-            let a = if i < N { self.0[i] } else { 0u64 };
-            let b = if i < M { other.0[i] } else { 0u64 };
-            let (d1, b1) = a.overflowing_sub(b);
-            if borrow {
-                let (d2, b2) = d1.overflowing_sub(1);
-                res.0[i] = d2;
-                borrow = b1 || b2;
-            } else {
-                res.0[i] = d1;
-                borrow = b1;
-            }
+    #[unroll_for_loops(9)]
+    pub fn sub_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
+        debug_assert!(M <= N, "sub_assign_trunc: right operand wider than self width N");
+        let mut borrow = 0u64;
+        for i in 0..N {
+            let rhs = if i < M { other.0[i] } else { 0 };
+            self.0[i] = sbb!(self.0[i], rhs, &mut borrow);
         }
-
-        res
+        debug_assert!(borrow == 0, "sub_assign_trunc underflow: borrow beyond N limbs");
     }
 
-    /// Truncated-width addition that mutates self: self += other and fit result into P limbs; overflow is ignored.
+    /// Truncated-width multiplication that mutates self: self = (self * other) mod 2^(64*N).
+    /// Keeps exactly N limbs (self's width). Overflow beyond N limbs is ignored.
     #[inline]
-    pub fn add_assign_trunc<const M: usize, const P: usize>(&mut self, other: &BigInt<M>) {
-        let mut carry = 0u64;
-        let limit = core::cmp::min(P, N);
-
-        let overlap = core::cmp::min(limit, core::cmp::min(N, M));
-        for i in 0..overlap {
-            self.0[i] = adc!(self.0[i], other.0[i], &mut carry);
+    pub fn mul_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
+        // Fast paths
+        if self.is_zero() || other.is_zero() {
+            for i in 0..N { self.0[i] = 0; }
+            return;
         }
-
-        // If self has remaining limbs within the limit, add carry through them
-        if N > M {
-            for i in overlap..limit {
-                self.0[i] = adc!(self.0[i], 0, &mut carry);
-            }
-        } else if M > N {
-            // If other has remaining limbs within the limit, add them into self (self's lanes may be zero)
-            for i in overlap..core::cmp::min(M, limit) {
-                self.0[i] = adc!(0, other.0[i], &mut carry);
-            }
-        }
-
-        // Propagate any remaining carry within the limit
-        let mut i = core::cmp::min(core::cmp::max(N, M), limit);
-        while carry != 0 && i < limit {
-            self.0[i] = adc!(self.0[i], 0, &mut carry);
-            i += 1;
-        }
-
-        // Zero out the remaining limbs beyond the limit (truncate to P limbs)
-        for i in limit..N {
-            self.0[i] = 0;
-        }
+        let left = *self; // snapshot original multiplicand
+        // zero self to use as accumulator buffer
+        for i in 0..N { self.0[i] = 0; }
+        // Accumulate left * other directly into self within width N; propagate carries within N
+        left.fm_limbs_into::<M, N>(&other.0, self, true);
     }
 
     /// Fused multiply-add with truncation: acc += self * other, fitting into P limbs; overflow is ignored.
@@ -431,55 +410,44 @@ impl<const N: usize> BigInt<N> {
         }
     }
 
-    /// Internal core engine: accumulate self * other_limbs into acc starting at lane_offset.
-    /// If carry_propagate is true, propagate spill from the highest updated limb forward within P;
-    /// otherwise, wrap in-place (discard further carry), matching existing wrapper semantics.
+    /// Accumulate with a compile-time-known count of multiplier limbs M to enable unrolling.
     #[inline]
-    #[unroll_for_loops(6)]
-    pub(crate) fn fm_limbs_into<const P: usize>(
+    #[unroll_for_loops(10)]
+    pub(crate) fn fm_limbs_into<const M: usize, const P: usize>(
         &self,
-        other_limbs: &[u64],
+        other_limbs: &[u64; M],
         acc: &mut BigInt<P>,
-        lane_offset: usize,
         carry_propagate: bool,
     ) {
-        if self.is_zero() {
-            return;
-        }
-        for (j, &mul_limb) in other_limbs.iter().enumerate() {
+        for j in 0..M {
+            let mul_limb = other_limbs[j];
             if mul_limb == 0 {
-                continue;
-            }
-            let base = lane_offset + j;
-            let mut carry = 0u64;
-            // Accumulate across self's limbs
-            for i in 0..N {
-                let idx = base + i;
-                if idx >= P {
-                    // Out of truncation range; compute carry but discard writes
-                    // We still need to advance carry for correctness within truncated semantics? No: any
-                    // contribution beyond P is dropped modulo 2^(64*P), so we can break.
-                    break;
+                // Skip zero multiplier limb
+                // (cannot use `continue` here due to unroll macro limitations)
+            } else {
+                let base = j;
+                let mut carry = 0u64;
+                for i in 0..N {
+                    let idx = base + i;
+                    if idx < P {
+                        acc.0[idx] = mac_with_carry!(acc.0[idx], self.0[i], mul_limb, &mut carry);
+                    }
                 }
-                acc.0[idx] = mac_with_carry!(acc.0[idx], self.0[i], mul_limb, &mut carry);
-            }
-            // Add remaining carry into next limb if within width
-            let next = base + N;
-            if next < P {
-                let (v, mut of) = acc.0[next].overflowing_add(carry);
-                acc.0[next] = v;
-                if carry_propagate && of {
-                    // propagate into higher limbs until carry consumed or width exhausted
-                    let mut k = next + 1;
-                    while of && k < P {
-                        let (nv, nof) = acc.0[k].overflowing_add(1);
-                        acc.0[k] = nv;
-                        of = nof;
-                        k += 1;
+                let next = base + N;
+                if next < P {
+                    let (v, mut of) = acc.0[next].overflowing_add(carry);
+                    acc.0[next] = v;
+                    if carry_propagate && of {
+                        let mut k = next + 1;
+                        while of && k < P {
+                            let (nv, nof) = acc.0[k].overflowing_add(1);
+                            acc.0[k] = nv;
+                            of = nof;
+                            k += 1;
+                        }
                     }
                 }
             }
-            // else: spill beyond P is dropped by truncation
         }
     }
 
@@ -683,48 +651,6 @@ impl<const N: usize> BigInteger for BigInt<N> {
         }
         res.0[N] = carry;
         res
-    }
-
-    #[inline]
-    fn fmu64a<const NPLUS1: usize>(&self, other: u64, acc: &mut BigInt<NPLUS1>) {
-        debug_assert!(NPLUS1 == N + 1);
-        self.fm_limbs_into::<NPLUS1>(&[other], acc, 0, false);
-    }
-
-    #[inline]
-    #[unroll_for_loops(8)]
-    fn fmu64a_carry_propagating<const NPLUS2: usize>(&self, other: u64, acc: &mut BigInt<NPLUS2>) {
-        debug_assert!(NPLUS2 == N + 2);
-        self.fm_limbs_into::<NPLUS2>(&[other], acc, 0, true);
-    }
-
-    #[inline]
-    #[unroll_for_loops(8)]
-    fn fm128a<const NPLUS2: usize>(&self, other: u128, acc: &mut BigInt<NPLUS2>) {
-        debug_assert!(NPLUS2 == N + 2);
-        let limbs = [other as u64, (other >> 64) as u64];
-        self.fm_limbs_into::<NPLUS2>(&limbs, acc, 0, true);
-    }
-
-    #[inline]
-    #[unroll_for_loops(8)]
-    fn fmu64a_into_nplus4<const NPLUS4: usize>(&self, other: u64, acc: &mut BigInt<NPLUS4>) {
-        debug_assert!(NPLUS4 == N + 4);
-        self.fm_limbs_into::<NPLUS4>(&[other], acc, 0, true);
-    }
-
-    #[inline]
-    #[unroll_for_loops(8)]
-    fn fm2x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 2], acc: &mut BigInt<NPLUS4>) {
-        debug_assert!(NPLUS4 == N + 4);
-        self.fm_limbs_into::<NPLUS4>(&other, acc, 0, true);
-    }
-
-    #[inline]
-    #[unroll_for_loops(8)]
-    fn fm3x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 3], acc: &mut BigInt<NPLUS4>) {
-        debug_assert!(NPLUS4 == N + 4);
-        self.fm_limbs_into::<NPLUS4>(&other, acc, 0, true);
     }
 
     #[inline]
@@ -1264,6 +1190,71 @@ impl<const N: usize> Not for BigInt<N> {
     }
 }
 
+// Arithmetic with truncating semantics for BigInt of different widths
+// Note: we cannot let the output have arbitrary width due to Rust's type limitation
+// So we set the output width to be the same as the width of the left operand
+impl<const N: usize, const M: usize> Add<BigInt<M>> for BigInt<N> {
+    type Output = BigInt<N>;
+
+    fn add(self, rhs: BigInt<M>) -> Self::Output {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.add_trunc::<M, N>(&rhs)
+    }
+}
+
+impl<const N: usize, const M: usize> Add<&BigInt<M>> for BigInt<N> {
+    type Output = BigInt<N>;
+    fn add(self, rhs: &BigInt<M>) -> Self::Output {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.add_trunc::<M, N>(rhs)
+    }
+}
+
+impl<const N: usize, const M: usize> Sub<BigInt<M>> for BigInt<N> {
+    type Output = BigInt<N>;
+
+    fn sub(self, rhs: BigInt<M>) -> Self::Output {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.sub_trunc::<M, N>(&rhs)
+    }
+}
+
+impl<const N: usize, const M: usize> Sub<&BigInt<M>> for BigInt<N> {
+    type Output = BigInt<N>;
+    fn sub(self, rhs: &BigInt<M>) -> Self::Output {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.sub_trunc::<M, N>(rhs)
+    }
+}
+
+impl<const N: usize, const M: usize> AddAssign<BigInt<M>> for BigInt<N> {
+    fn add_assign(&mut self, rhs: BigInt<M>) {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.add_assign_trunc::<M>(&rhs);
+    }
+}
+
+impl<const N: usize, const M: usize> AddAssign<&BigInt<M>> for BigInt<N> {
+    fn add_assign(&mut self, rhs: &BigInt<M>) {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.add_assign_trunc::<M>(rhs);
+    }
+}
+
+impl<const N: usize, const M: usize> SubAssign<BigInt<M>> for BigInt<N> {
+    fn sub_assign(&mut self, rhs: BigInt<M>) {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.sub_assign_trunc::<M>(&rhs);
+    }
+}
+
+impl<const N: usize, const M: usize> SubAssign<&BigInt<M>> for BigInt<N> {
+    fn sub_assign(&mut self, rhs: &BigInt<M>) {
+        debug_assert!(N >= M, "right operand cannot be wider than left operand");
+        self.sub_assign_trunc::<M>(rhs);
+    }
+}
+
 /// Compute the signed modulo operation on a u64 representation, returning the result.
 /// If n % modulus > modulus / 2, return modulus - n
 /// # Example
@@ -1442,41 +1433,11 @@ pub trait BigInteger:
     /// NEW! Multiplies self by a u64, returning a bigint with one extra limb to hold overflow.
     fn mul_u64_w_carry<const NPLUS1: usize>(&self, other: u64) -> BigInt<NPLUS1>;
 
-    /// NEW! Multiplies self by a u64, accumulating the result in `acc`, which must have one extra limb.
-    /// overflow causes a wraparound in the highest limb of the accumulator.
-    fn fmu64a<const NPLUS1: usize>(&self, other: u64, acc: &mut BigInt<NPLUS1>);
-
-    /// NEW! Fused multiply-accumulate with a u64 multiplier and explicit overflow propagation.
-    /// Accumulates `self * other` into `acc`, which must have two extra limbs (N + 2).
-    /// Any overflow from limb N is carried into limb N+1 instead of wrapping.
-    fn fmu64a_carry_propagating<const NPLUS2: usize>(&self, other: u64, acc: &mut BigInt<NPLUS2>);
-
     /// NEW! Multiplies self by a u128, returning a bigint with two extra limbs to hold overflow.
     fn mul_u128_w_carry<const NPLUS1: usize, const NPLUS2: usize>(
         &self,
         other: u128,
     ) -> BigInt<NPLUS2>;
-
-    /// NEW! Fused multiply-accumulate with a u128 multiplier.
-    /// Accumulate self * other into `acc`, which must have two extra limbs.
-    /// Overflow causes wraparound in the highest limb of the accumulator.
-    fn fm128a<const NPLUS2: usize>(&self, other: u128, acc: &mut BigInt<NPLUS2>);
-
-    /// NEW! Fused multiply-accumulate of `self` by a single `u64` limb, accumulating into
-    /// an accumulator with four extra limbs (N + 4), with carry propagation within the width.
-    /// This will accumulate `self * other` into `acc` and propagate any overflow from limb N
-    /// into limbs N+1..=N+3. Overflow beyond limb N+3 is dropped by contract.
-    fn fmu64a_into_nplus4<const NPLUS4: usize>(&self, other: u64, acc: &mut BigInt<NPLUS4>);
-
-    /// NEW! Fused multiply-accumulate of `self` by a two-limb `[u64; 2]` multiplier, accumulating
-    /// into an accumulator with four extra limbs (N + 4). Carries are propagated within the width.
-    /// This is equivalent to doing two u64 passes offset by one limb and cascading carries.
-    fn fm2x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 2], acc: &mut BigInt<NPLUS4>);
-
-    /// NEW! Fused multiply-accumulate of `self` by a three-limb `[u64; 3]` multiplier, accumulating
-    /// into an accumulator with four extra limbs (N + 4). Carries are propagated within the width.
-    /// This is equivalent to doing three u64 passes offset by 0, 1, and 2 limbs, respectively.
-    fn fm3x64a_into_nplus4<const NPLUS4: usize>(&self, other: [u64; 3], acc: &mut BigInt<NPLUS4>);
 
     /// Multiplies this [`BigInteger`] by another `BigInteger`, storing the result in `self`.
     /// Overflow is ignored.
