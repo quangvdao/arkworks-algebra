@@ -59,6 +59,7 @@ pub fn x86_64_asm_mul(input: TokenStream) -> TokenStream {
     } else {
         panic!("The number of limbs must be a literal");
     };
+    #[allow(clippy::redundant_comparisons)]
     if num_limbs <= 6 && num_limbs <= 3 * MAX_REGS {
         let impl_block = generate_impl(num_limbs, true);
 
@@ -110,6 +111,7 @@ pub fn x86_64_asm_square(input: TokenStream) -> TokenStream {
     } else {
         panic!("The number of limbs must be a literal");
     };
+    #[allow(clippy::redundant_comparisons)]
     if num_limbs <= 6 && num_limbs <= 3 * MAX_REGS {
         let impl_block = generate_impl(num_limbs, false);
 

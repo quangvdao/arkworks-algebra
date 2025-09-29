@@ -4,6 +4,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
     Write,
 };
+use ark_std::Zero;
 use core::cmp::Ordering;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
@@ -24,6 +25,18 @@ impl<const N: usize> Default for SignedBigInt<N> {
     #[inline]
     fn default() -> Self {
         Self::zero()
+    }
+}
+
+impl<const N: usize> Zero for SignedBigInt<N> {
+    #[inline]
+    fn zero() -> Self {
+        Self::zero()
+    }
+
+    #[inline]
+    fn is_zero(&self) -> bool {
+        self.magnitude.is_zero()
     }
 }
 
@@ -85,12 +98,6 @@ impl<const N: usize> SignedBigInt<N> {
             magnitude: BigInt::from(1u64),
             is_positive: true,
         }
-    }
-
-    /// Return true if magnitude is zero (sign is not considered).
-    #[inline]
-    pub fn is_zero(&self) -> bool {
-        self.magnitude.is_zero()
     }
 
     /// Borrow the magnitude (absolute value).

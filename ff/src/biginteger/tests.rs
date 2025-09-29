@@ -5,6 +5,7 @@ pub mod tests {
         biginteger::{BigInteger, SignedBigInt},
         UniformRand,
     };
+    use ark_std::Zero;
     use num_bigint::BigUint;
 
     // Test elementary math operations for BigInteger.

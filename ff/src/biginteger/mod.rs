@@ -14,8 +14,8 @@ use ark_std::{
     fmt::{Debug, Display, UpperHex},
     io::{Read, Write},
     ops::{
-        BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl, ShlAssign, Shr,
-        ShrAssign, Add, Sub, AddAssign, SubAssign,
+        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl,
+        ShlAssign, Shr, ShrAssign, Sub, SubAssign,
     },
     rand::{
         distributions::{Distribution, Standard},
@@ -23,6 +23,7 @@ use ark_std::{
     },
     str::FromStr,
     vec::*,
+    Zero,
 };
 use num_bigint::BigUint;
 use zeroize::Zeroize;
@@ -346,13 +347,19 @@ impl<const N: usize> BigInt<N> {
     #[inline]
     #[unroll_for_loops(9)]
     pub fn add_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
-        debug_assert!(M <= N, "add_assign_trunc: right operand wider than self width N");
+        debug_assert!(
+            M <= N,
+            "add_assign_trunc: right operand wider than self width N"
+        );
         let mut carry = 0u64;
         for i in 0..N {
             let rhs = if i < M { other.0[i] } else { 0 };
             self.0[i] = adc!(self.0[i], rhs, &mut carry);
         }
-        debug_assert!(carry == 0, "add_assign_trunc overflow: carry beyond N limbs");
+        debug_assert!(
+            carry == 0,
+            "add_assign_trunc overflow: carry beyond N limbs"
+        );
     }
 
     /// Truncated-width subtraction that mutates self: self -= other, keeping N limbs (self's width).
@@ -363,13 +370,19 @@ impl<const N: usize> BigInt<N> {
     #[inline]
     #[unroll_for_loops(9)]
     pub fn sub_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
-        debug_assert!(M <= N, "sub_assign_trunc: right operand wider than self width N");
+        debug_assert!(
+            M <= N,
+            "sub_assign_trunc: right operand wider than self width N"
+        );
         let mut borrow = 0u64;
         for i in 0..N {
             let rhs = if i < M { other.0[i] } else { 0 };
             self.0[i] = sbb!(self.0[i], rhs, &mut borrow);
         }
-        debug_assert!(borrow == 0, "sub_assign_trunc underflow: borrow beyond N limbs");
+        debug_assert!(
+            borrow == 0,
+            "sub_assign_trunc underflow: borrow beyond N limbs"
+        );
     }
 
     /// Truncated-width multiplication that mutates self: self = (self * other) mod 2^(64*N).
@@ -378,12 +391,16 @@ impl<const N: usize> BigInt<N> {
     pub fn mul_assign_trunc<const M: usize>(&mut self, other: &BigInt<M>) {
         // Fast paths
         if self.is_zero() || other.is_zero() {
-            for i in 0..N { self.0[i] = 0; }
+            for i in 0..N {
+                self.0[i] = 0;
+            }
             return;
         }
         let left = *self; // snapshot original multiplicand
-        // zero self to use as accumulator buffer
-        for i in 0..N { self.0[i] = 0; }
+                          // zero self to use as accumulator buffer
+        for i in 0..N {
+            self.0[i] = 0;
+        }
         // Accumulate left * other directly into self within width N; propagate carries within N
         left.fm_limbs_into::<M, N>(&other.0, self, true);
     }
@@ -512,11 +529,26 @@ impl<const N: usize> BigInt<N> {
     /// Debug-asserts that M <= N.
     #[inline]
     pub fn zero_extend_from<const M: usize>(smaller: &BigInt<M>) -> BigInt<N> {
-        debug_assert!(M <= N, "cannot zero-extend: source has more limbs than destination");
+        debug_assert!(
+            M <= N,
+            "cannot zero-extend: source has more limbs than destination"
+        );
         let mut limbs = [0u64; N];
         let copy_len = if M < N { M } else { N };
         limbs[..copy_len].copy_from_slice(&smaller.0[..copy_len]);
         BigInt::<N>(limbs)
+    }
+}
+
+impl<const N: usize> Zero for BigInt<N> {
+    #[inline]
+    fn zero() -> Self {
+        Self::zero()
+    }
+
+    #[inline]
+    fn is_zero(&self) -> bool {
+        self.0.iter().all(|&limb| limb == 0)
     }
 }
 
@@ -793,11 +825,6 @@ impl<const N: usize> BigInteger for BigInt<N> {
     #[inline]
     fn is_even(&self) -> bool {
         !self.is_odd()
-    }
-
-    #[inline]
-    fn is_zero(&self) -> bool {
-        self.0.iter().all(|&e| e == 0)
     }
 
     #[inline]
@@ -1308,6 +1335,7 @@ pub trait BigInteger:
     + 'static
     + UniformRand
     + Zeroize
+    + Zero
     + AsMut<[u64]>
     + AsRef<[u64]>
     + From<u128>
@@ -1571,17 +1599,6 @@ pub trait BigInteger:
     /// assert!(two.is_even());
     /// ```
     fn is_even(&self) -> bool;
-
-    /// Returns true iff this number is zero.
-    /// # Example
-    ///
-    /// ```
-    /// use ark_ff::{biginteger::BigInteger64 as B, BigInteger as _};
-    ///
-    /// let mut zero = B::from(0u64);
-    /// assert!(zero.is_zero());
-    /// ```
-    fn is_zero(&self) -> bool;
 
     /// Compute the minimum number of bits needed to encode this number.
     /// # Example
