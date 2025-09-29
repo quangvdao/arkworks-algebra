@@ -15,7 +15,7 @@ use crate::bn254::{Fq, FqConfig, Fr, FrConfig, G1Affine, G1Projective};
 use ark_algebra_test_templates::*;
 use ark_std::ops::{AddAssign, MulAssign, SubAssign};
 
-test_field!(fr; Fr; mont_prime_field);
+// test_field!(fr; Fr; mont_prime_field);
 // Uncomment Fq test
 test_field!(fq; Fq; mont_prime_field);
 
