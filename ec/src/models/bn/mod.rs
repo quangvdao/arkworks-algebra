@@ -104,6 +104,9 @@ pub trait BnConfig: 'static + Sized {
 
     #[allow(clippy::let_and_return)]
     fn final_exponentiation(f: MillerLoopOutput<Bn<Self>>) -> Option<PairingOutput<Bn<Self>>> {
+        // Beuchat et al p.9 equation 3.
+        // https://eprint.iacr.org/2010/354.pdf
+
         // Easy part: result = elt^((q^6-1)*(q^2+1)).
         // Follows, e.g., Beuchat et al page 9, by computing result as follows:
         //   elt^((q^6-1)*(q^2+1)) = (conj(elt) * elt^(-1))^(q^2+1)
@@ -127,6 +130,7 @@ pub trait BnConfig: 'static + Sized {
             // r = f^((p^6 - 1)(p^2 + 1))
             r *= &f2;
 
+            // https://cacr.uwaterloo.ca/techreports/2011/cacr2011-26.pdf
             // Hard part follows Laura Fuentes-Castaneda et al. "Faster hashing to G2"
             // by computing:
             //
@@ -231,3 +235,5 @@ impl<P: BnConfig> Pairing for Bn<P> {
         P::final_exponentiation(f)
     }
 }
+
+pub struct BNCompressedTargetField<P: BnConfig>(pub Fp12<P::Fp12Config>);
