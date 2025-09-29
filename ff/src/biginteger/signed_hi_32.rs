@@ -743,11 +743,20 @@ impl From<S128> for S160 {
     }
 }
 
-impl From<S224> for crate::biginteger::BigInt<4> {
+impl<const N: usize> From<S224> for crate::biginteger::BigInt<N> {
     #[inline]
+    #[allow(unsafe_code)]
     fn from(val: S224) -> Self {
+        if N != 4 {
+            panic!("FromS224 for BigInt<N> only supports N=4, got N={N}");
+        }
         let lo = val.magnitude_lo();
         let hi = val.magnitude_hi() as u64;
-        crate::biginteger::BigInt::<4>([lo[0], lo[1], lo[2], hi])
+        let bigint4 = crate::biginteger::BigInt::<4>([lo[0], lo[1], lo[2], hi]);
+
+        unsafe {
+            let ptr = &bigint4 as *const BigInt<4> as *const BigInt<N>;
+            ptr.read()
+        }
     }
 }

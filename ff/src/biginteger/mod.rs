@@ -519,6 +519,10 @@ impl<const N: usize> BigInt<N> {
         BigInt::<N>(limbs)
     }
 
+impl<const N: usize> From<[u64; N]> for BigInt<N> {
+    fn from(limbs: [u64; N]) -> Self {
+        BigInt(limbs)
+    }
 }
 
 impl<const N: usize> BigInteger for BigInt<N> {
