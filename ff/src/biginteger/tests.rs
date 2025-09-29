@@ -6,6 +6,7 @@ use crate::{
     UniformRand,
 };
 use num_bigint::BigUint;
+use ark_std::Zero;
 
 // Test elementary math operations for BigInteger.
 #[allow(clippy::eq_op)]
