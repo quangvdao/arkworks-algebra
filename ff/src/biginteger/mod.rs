@@ -518,6 +518,7 @@ impl<const N: usize> BigInt<N> {
         limbs[..copy_len].copy_from_slice(&smaller.0[..copy_len]);
         BigInt::<N>(limbs)
     }
+}
 
 impl<const N: usize> From<[u64; N]> for BigInt<N> {
     fn from(limbs: [u64; N]) -> Self {
