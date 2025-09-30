@@ -1,6 +1,6 @@
 use ark_bn254::{Fr, G2Affine, G2Projective};
 use ark_ec::PrimeGroup;
-use ark_ec::{AdditiveGroup, AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, UniformRand};
 use ark_std::{test_rng, Zero};
 use num_bigint::BigInt;
