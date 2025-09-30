@@ -462,6 +462,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         }
     }
 
+    fn from_bigint_unchecked(r: BigInt<N>) -> Option<Fp<MontBackend<Self, N>, N>> {
+        Some(Fp::new_unchecked(r))
+    }
+
     fn from_bigint(r: BigInt<N>) -> Option<Fp<MontBackend<Self, N>, N>> {
         let mut r = Fp::new_unchecked(r);
         if r.is_zero() {
@@ -843,6 +847,10 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
 
     fn from_bigint(r: BigInt<N>) -> Option<Fp<Self, N>> {
         T::from_bigint(r)
+    }
+
+    fn from_bigint_unchecked(r: BigInt<N>) -> Option<Fp<Self, N>> {
+        T::from_bigint_unchecked(r)
     }
 
     #[inline]
