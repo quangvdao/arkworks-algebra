@@ -49,14 +49,6 @@ name = "g1_scalar_multiplication"
 harness = false
 
 [[bench]]
-name = "sz_check_bench"
-harness = false
-
-[[bench]]
-name = "expression_bench"
-harness = false
-
-[[bench]]
 name = "vector_scalar_mul_add_gamma_g2"
 harness = false
 

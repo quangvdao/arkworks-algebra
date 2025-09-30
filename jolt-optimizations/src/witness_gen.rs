@@ -45,14 +45,13 @@ impl ExponentiationSteps {
                     fq12_to_multilinear_evals(&Fq12::one()), // ρ_0
                     fq12_to_multilinear_evals(&base),        // ρ_1
                 ],
-                quotient_mles: vec![], // Could compute a single Q_1 if needed
+                quotient_mles: vec![],
                 bits: vec![true],
             };
         }
 
         let bits_msb: Vec<bool> = (0..=msb_idx).rev().map(|i| bits_le[i]).collect();
 
-        // ρ_0 = 1
         let mut rho = Fq12::one();
         let mut rho_mles = vec![fq12_to_multilinear_evals(&rho)];
         let mut quotient_mles = vec![];
@@ -67,7 +66,7 @@ impl ExponentiationSteps {
 
             // One quotient per step for: ρ_i(X) - ρ_{i-1}(X)² * A(X)^{b} = Q_i(X) g(X)
             let q_i = compute_step_quotient_msb(rho_prev, rho_i, base, b);
-            quotient_mles.push(quotient_to_mle(&q_i));
+            quotient_mles.push(q_i);
 
             rho = rho_i;
             rho_mles.push(fq12_to_multilinear_evals(&rho));
@@ -83,13 +82,15 @@ impl ExponentiationSteps {
         }
     }
 
-    /// Verify that the final result matches base^exponent
+    /// Verify that the final result matches base^exponent,
+    /// Used for testing
     pub fn verify_result(&self) -> bool {
         self.result == self.base.pow(self.exponent.into_bigint())
     }
 
     /// Verify constraint at a Boolean cube point
     /// Checks that the constraint holds at cube vertices where it was constructed to be zero
+    /// Used for testing
     pub fn verify_constraint_at_cube_point(&self, step: usize, cube_index: usize) -> bool {
         if step == 0 || step > self.quotient_mles.len() || cube_index >= 16 {
             return false;
@@ -110,7 +111,6 @@ impl ExponentiationSteps {
         let bit = self.bits[step - 1];
         let base_power = if bit { base_eval } else { Fq::one() };
         let constraint = rho_curr - rho_prev.square() * base_power - quotient * g_eval;
-        println!("constraint: {:?}", constraint);
         constraint.is_zero()
     }
 
@@ -144,6 +144,7 @@ fn compute_step_quotient_msb(rho_prev: Fq12, rho_i: Fq12, base: Fq12, bit: bool)
 }
 
 /// Get g as MLE evaluations over the Boolean cube {0,1}^4
+/// Used for testing
 pub fn get_g_mle() -> Vec<Fq> {
     // Use the same encoding as fq12_to_multilinear_evals
     // g(X) = X^12 - 18X^6 + 82 as coefficient array
@@ -157,13 +158,8 @@ pub fn get_g_mle() -> Vec<Fq> {
     to_multilinear_evals(&g_array)
 }
 
-/// Convert quotient MLE to the format needed (already an MLE, just return it)
-fn quotient_to_mle(quotient: &[Fq]) -> Vec<Fq> {
-    // In the MLE paradigm, quotient is already an MLE
-    quotient.to_vec()
-}
-
 /// Convert a cube index (0..15) to a Boolean point in {0,1}^4
+/// Used for testing
 pub fn index_to_boolean_point(index: usize) -> Vec<Fq> {
     vec![
         Fq::from((index & 1) as u64),        // bit 0
@@ -175,15 +171,16 @@ pub fn index_to_boolean_point(index: usize) -> Vec<Fq> {
 
 /// Evaluate an MLE at a Boolean cube point
 /// For Boolean points, this is equivalent to indexing but makes the evaluation explicit
+/// Used for testing
 fn eval_mle_at_boolean_point(mle: &[Fq], point: &[Fq]) -> Fq {
     // For Boolean points, we could just index, but using eval_multilinear
     // makes it clear we're doing MLE evaluation
     eval_multilinear(mle, point)
 }
 
-/// Compute H̃(z) via eq-weights (definition of MLE), not by multiplying opened MLEs
 /// H(x) = ρᵢ(x) - ρᵢ₋₁(x)² · A(x)^{bᵢ} - Qᵢ(x) · g(x) for x ∈ {0,1}^4
 /// H̃(z) = Σ_{x∈{0,1}^4} eq(z,x) · H(x)
+/// Used for testing
 pub fn h_tilde_at_point(
     rho_prev_mle: &[Fq],
     rho_curr_mle: &[Fq],
@@ -208,14 +205,8 @@ pub fn h_tilde_at_point(
         let prod = rho_prev_mle[j].square() * if bit { base_mle[j] } else { Fq::one() };
         let h_x = rho_curr_mle[j] - prod - q_mle[j] * g_mle[j];
 
-        // Add weighted contribution to MLE
         acc += h_x * w[j];
     }
 
-    acc // equals H̃(z)
-}
-
-/// Legacy compatibility function
-pub fn pow_with_steps_le(base: Fq12, exponent: Fr) -> ExponentiationSteps {
-    ExponentiationSteps::new(base, exponent)
+    acc
 }

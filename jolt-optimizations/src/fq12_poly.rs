@@ -4,33 +4,6 @@ use ark_ff::{Field, One, Zero};
 
 const NINE: u64 = 9;
 
-/// Newtype wrapper for degree-12 polys from Fq12
-#[derive(Clone, Debug, Default)]
-pub struct Poly12([Fq; 12]);
-
-impl Poly12 {
-    pub fn new(coeffs: [Fq; 12]) -> Self {
-        Self(coeffs)
-    }
-
-    pub fn coeffs(&self) -> &[Fq; 12] {
-        &self.0
-    }
-
-    pub fn coeffs_mut(&mut self) -> &mut [Fq; 12] {
-        &mut self.0
-    }
-
-    pub fn to_vec(&self) -> Vec<Fq> {
-        self.0.to_vec()
-    }
-
-    /// Horner's method
-    pub fn eval(&self, r: &Fq) -> Fq {
-        self.0.iter().rev().fold(Fq::zero(), |acc, c| acc * r + c)
-    }
-}
-
 /// Convert Fq12 to polynomial representation using tower basis mapping
 ///
 /// Maps Fq12 basis elements to powers of w:
@@ -70,33 +43,15 @@ pub fn fq12_to_poly12_coeffs(a: &Fq12) -> [Fq; 12] {
     coeffs
 }
 
-/// The minimal polynomial g(X) = X^12 - 18 X^6 + 82
-struct IrreduciblePoly;
-
-impl IrreduciblePoly {
-    const COEFF_0: u64 = 82;
-    const COEFF_6: u64 = 18;
-
-    /// Evaluate g(X) at point r
-    fn eval(r: &Fq) -> Fq {
-        let r6 = (r.square() * r).square(); // r^6 = (r^2 * r)^2
-        let r12 = r6.square();
-        r12 - Fq::from(Self::COEFF_6) * r6 + Fq::from(Self::COEFF_0)
-    }
-
-    /// Get coefficients as a vector
-    fn coeffs() -> Vec<Fq> {
-        let mut g = vec![Fq::zero(); 13];
-        g[0] = Fq::from(Self::COEFF_0);
-        g[6] = -Fq::from(Self::COEFF_6);
-        g[12] = Fq::one();
-        g
-    }
-}
+/// Coefficients for the minimal polynomial g(X) = X^12 - 18 X^6 + 82
+const G_COEFF_0: u64 = 82;
+const G_COEFF_6: u64 = 18;
 
 /// Evaluate g(X) = X^12 - 18 X^6 + 82 at a given point r
 pub fn g_eval(r: &Fq) -> Fq {
-    IrreduciblePoly::eval(r)
+    let r6 = (r.square() * r).square(); // r^6 = (r^2 * r)^2
+    let r12 = r6.square();
+    r12 - Fq::from(G_COEFF_6) * r6 + Fq::from(G_COEFF_0)
 }
 
 /// Horner evaluation for arbitrary-degree poly
@@ -104,79 +59,13 @@ pub fn eval_poly_vec(coeffs: &[Fq], r: &Fq) -> Fq {
     coeffs.iter().rev().fold(Fq::zero(), |acc, c| acc * r + c)
 }
 
-fn poly_op_in_place<F>(a: &mut Vec<Fq>, b: &[Fq], op: F)
-where
-    F: Fn(&mut Fq, Fq),
-{
-    if b.len() > a.len() {
-        a.resize(b.len(), Fq::zero());
-    }
-    b.iter()
-        .enumerate()
-        .for_each(|(i, &coeff)| op(&mut a[i], coeff));
-}
-
-pub fn poly_add_in_place(a: &mut Vec<Fq>, b: &[Fq]) {
-    poly_op_in_place(a, b, |a, b| *a += b);
-}
-
-pub fn poly_sub_in_place(a: &mut Vec<Fq>, b: &[Fq]) {
-    poly_op_in_place(a, b, |a, b| *a -= b);
-}
-
-pub fn poly_mul(a: &[Fq], b: &[Fq]) -> Vec<Fq> {
-    if a.is_empty() || b.is_empty() {
-        return vec![];
-    }
-
-    let mut out = vec![Fq::zero(); a.len() + b.len() - 1];
-    a.iter().enumerate().for_each(|(i, &ai)| {
-        b.iter().enumerate().for_each(|(j, &bj)| {
-            out[i + j] += ai * bj;
-        })
-    });
-    out
-}
-
-/// Polynomial long division by a monic divisor
-pub fn poly_div_rem_monic(mut dividend: Vec<Fq>, divisor: &[Fq]) -> (Vec<Fq>, Vec<Fq>) {
-    assert!(!divisor.is_empty(), "divisor must be non-empty");
-    assert!(
-        divisor.last().unwrap().is_one(),
-        "divisor must be monic (leading coefficient = 1)"
-    );
-
-    if dividend.is_empty() || dividend.len() < divisor.len() {
-        return (vec![], dividend);
-    }
-
-    let deg_dividend = dividend.len() - 1;
-    let deg_divisor = divisor.len() - 1;
-    let mut quotient = vec![Fq::zero(); deg_dividend - deg_divisor + 1];
-
-    for k in (deg_divisor..=deg_dividend).rev() {
-        let coeff = dividend[k];
-        quotient[k - deg_divisor] = coeff;
-
-        if !coeff.is_zero() {
-            // Subtract coeff * x^{k-deg_divisor} * divisor from dividend
-            (0..=deg_divisor).for_each(|j| {
-                dividend[k - deg_divisor + j] -= coeff * divisor[j];
-            });
-        }
-    }
-
-    // Trim trailing zeros from remainder
-    while dividend.last() == Some(&Fq::zero()) {
-        dividend.pop();
-    }
-
-    (quotient, dividend)
-}
-
 /// Build the coefficients for g(X) = X^12 - 18 X^6 + 82
 pub fn g_coeffs() -> Vec<Fq> {
-    IrreduciblePoly::coeffs()
+    let mut g = vec![Fq::zero(); 13];
+    g[0] = Fq::from(G_COEFF_0);
+    g[6] = -Fq::from(G_COEFF_6);
+    g[12] = Fq::one();
+    g
 }
 
 /// Compute the multilinear extension (MLE) of a univariate polynomial.
@@ -222,17 +111,17 @@ pub fn eval_multilinear(evals: &[Fq], point: &[Fq]) -> Fq {
 }
 
 /// Compute equality function weights eq(z, x) for all x ∈ {0,1}^4
-/// Returns a vector of 16 weights where w[i] = eq(z, binary_decomposition(i))
+/// Helper for testing in arkworks
 pub fn eq_weights(z: &[Fq]) -> Vec<Fq> {
     assert_eq!(z.len(), 4, "Point z must be 4-dimensional");
     let mut w = vec![Fq::zero(); 16];
 
     for idx in 0..16 {
         // Binary decomposition of idx
-        let x0 = if (idx & 1) != 0 { Fq::one() } else { Fq::zero() };
-        let x1 = if (idx & 2) != 0 { Fq::one() } else { Fq::zero() };
-        let x2 = if (idx & 4) != 0 { Fq::one() } else { Fq::zero() };
-        let x3 = if (idx & 8) != 0 { Fq::one() } else { Fq::zero() };
+        let x0 = Fq::from((idx & 1) as u64);
+        let x1 = Fq::from(((idx >> 1) & 1) as u64);
+        let x2 = Fq::from(((idx >> 2) & 1) as u64);
+        let x3 = Fq::from(((idx >> 3) & 1) as u64);
 
         // eq(z, x) = ∏ᵢ ((1-zᵢ)(1-xᵢ) + zᵢxᵢ)
         let t0 = (Fq::one() - z[0]) * (Fq::one() - x0) + z[0] * x0;
