@@ -15,7 +15,6 @@ fn random_poly12_coeffs() -> [Fq; 12] {
 
 #[test]
 fn test_mle_agreement_with_univariate() {
-    // Test that MLE agrees with original polynomial on domain {0..15}
     let coeffs = random_poly12_coeffs();
     let mle_evals = to_multilinear_evals(&coeffs);
 
@@ -28,7 +27,6 @@ fn test_mle_agreement_with_univariate() {
             "MLE evaluation doesn't match univariate at point {}",
             i
         );
-        // Binary decomposition of i: (b₀, b₁, b₂, b₃) where i = b₀ + 2b₁ + 4b₂ + 8b₃
         let binary_point = vec![
             Fq::from((i & 1) as u64),
             Fq::from(((i >> 1) & 1) as u64),
@@ -51,7 +49,6 @@ fn test_mle_is_multilinear() {
     let coeffs = random_poly12_coeffs();
     let mle_evals = to_multilinear_evals(&coeffs);
 
-    // Test linearity in each variable
     for var_idx in 0..4 {
         let point = vec![
             Fq::rand(&mut rng),
@@ -84,7 +81,6 @@ fn test_mle_is_multilinear() {
 
 #[test]
 fn test_mle_special_cases() {
-    // Test 1: Zero polynomial
     let zero_coeffs = [Fq::zero(); 12];
     let mle = to_multilinear_evals(&zero_coeffs);
     assert!(
@@ -92,7 +88,6 @@ fn test_mle_special_cases() {
         "Zero polynomial MLE should be all zeros"
     );
 
-    // Test 2: Constant polynomial p(x) = 42
     let const_val = Fq::from(42u64);
     let mut const_coeffs = [Fq::zero(); 12];
     const_coeffs[0] = const_val;
@@ -102,7 +97,6 @@ fn test_mle_special_cases() {
         "Constant polynomial MLE should be constant"
     );
 
-    // Test 3: Linear polynomial p(x) = x
     let mut linear_coeffs = [Fq::zero(); 12];
     linear_coeffs[1] = Fq::one();
     let mle = to_multilinear_evals(&linear_coeffs);
@@ -115,8 +109,6 @@ fn test_mle_special_cases() {
             i
         );
     }
-
-    // Test 4: Quadratic polynomial p(x) = x²
     let mut quad_coeffs = [Fq::zero(); 12];
     quad_coeffs[2] = Fq::one();
     let mle = to_multilinear_evals(&quad_coeffs);
@@ -132,7 +124,6 @@ fn test_mle_special_cases() {
 
 #[test]
 fn test_mle_high_degree() {
-    // Test with maximum degree polynomial (degree 11)
     let mut coeffs = [Fq::zero(); 12];
     coeffs[11] = Fq::one();
 

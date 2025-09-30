@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use ark_bn254::{Fr, G1Projective, G2Projective};
-use ark_ec::{AdditiveGroup, PrimeGroup};
+use ark_ec::PrimeGroup;
 use ark_ff::PrimeField;
 use ark_std::UniformRand;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};

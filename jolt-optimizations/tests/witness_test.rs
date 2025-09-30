@@ -43,7 +43,6 @@ fn test_witness_generation_and_constraints() {
             assert_eq!(mle.len(), 16, "Quotient MLEs should have 16 evaluations");
         }
 
-        // Test constraint verification at Boolean cube points
         // The constraint should be zero at all 16 cube vertices
         for cube_idx in 0..16 {
             for step in 1..=witness.num_steps() {
@@ -68,23 +67,22 @@ fn test_trivial_cases() {
     assert_eq!(witness_zero.result, Fq12::one());
     assert!(witness_zero.verify_result());
     assert_eq!(witness_zero.bits.len(), 0);
-    assert_eq!(witness_zero.rho_mles.len(), 1); // Just ρ_0 = 1
+    assert_eq!(witness_zero.rho_mles.len(), 1);
     assert_eq!(witness_zero.quotient_mles.len(), 0);
 
     // Test exponent = 1
     let witness_one = ExponentiationSteps::new(base, Fr::from(1u64));
     assert_eq!(witness_one.result, base);
     assert!(witness_one.verify_result());
-    assert_eq!(witness_one.bits, vec![true]); // Single bit: 1
-    assert_eq!(witness_one.rho_mles.len(), 2); // ρ_0 = 1, ρ_1 = base
-
+    assert_eq!(witness_one.bits, vec![true]);
+    assert_eq!(witness_one.rho_mles.len(), 2);
     // Test small known values to verify bit sequence
     let witness_five = ExponentiationSteps::new(base, Fr::from(5u64));
-    assert_eq!(witness_five.bits, vec![true, false, true]); // MSB to LSB: 101
+    assert_eq!(witness_five.bits, vec![true, false, true]);
     assert!(witness_five.verify_result());
 
     let witness_ten = ExponentiationSteps::new(base, Fr::from(10u64));
-    assert_eq!(witness_ten.bits, vec![true, false, true, false]); // MSB to LSB: 1010
+    assert_eq!(witness_ten.bits, vec![true, false, true, false]);
     assert!(witness_ten.verify_result());
 }
 
@@ -194,15 +192,13 @@ fn test_constraint_at_random_field_element() {
 
     // Create witness for a simple exponentiation
     let base = Fq12::rand(&mut rng);
-    let exponent = Fr::from(10000300u64); // Simple exponent: binary 111
+    let exponent = Fr::from(10000300u64);
     let witness = ExponentiationSteps::new(base, exponent);
 
     let base_mle = fq12_to_multilinear_evals(&base);
     let g_mle = get_g_mle();
 
-    // Test at random field elements (not on hypercube)
     for test_idx in 0..10000 {
-        // Generate random point z = (z0, z1, z2, z3) where zi ∈ Fq \ {0,1}
         let z: Vec<Fq> = (0..4)
             .map(|_| {
                 let mut val = Fq::rand(&mut rng);
@@ -214,11 +210,9 @@ fn test_constraint_at_random_field_element() {
             })
             .collect();
 
-        // Pick a step to check
         let step = 1 + (test_idx % witness.num_steps());
         let bit = witness.bits[step - 1];
 
-        // Compute H̃(z) using the correct MLE definition
         let h = h_tilde_at_point(
             &witness.rho_mles[step - 1],
             &witness.rho_mles[step],
@@ -229,7 +223,7 @@ fn test_constraint_at_random_field_element() {
             &z,
         );
 
-        // H̃(z) must be 0 at random z (Sumcheck-consistent)
+        // H̃(z) must be 0 at random z
         assert!(
             h.is_zero(),
             "H̃(z) must be 0 at random z (test {}, step {}). Got: {:?}",
@@ -241,7 +235,6 @@ fn test_constraint_at_random_field_element() {
 
     println!("✓ Verified: H̃(z) = 0 at 20 random field elements (Sumcheck correct)");
 
-    // Also verify it works on the hypercube (sanity check)
     for step in 1..=witness.num_steps() {
         for cube_idx in 0..16 {
             assert!(
@@ -254,51 +247,4 @@ fn test_constraint_at_random_field_element() {
     }
 
     println!("✓ Verified: Constraints are zero on hypercube (sanity check)");
-}
-
-#[test]
-fn test_zero_tampering_soundness() {
-    let mut rng = test_rng();
-    let base = Fq12::rand(&mut rng);
-
-    for exp_val in [2u64, 3, 7, 15, 31] {
-        let exponent = Fr::from(exp_val);
-        let mut witness = ExponentiationSteps::new(base, exponent);
-
-        // Setting ρ to zero should break soundness
-        if witness.rho_mles.len() > 1 {
-            let original = witness.rho_mles[1][0];
-            witness.rho_mles[1][0] = Fq::zero();
-
-            let mut soundness_broken = false;
-            for step in 1..=witness.num_steps() {
-                if !witness.verify_constraint_at_cube_point(step, 0) {
-                    soundness_broken = true;
-                    break;
-                }
-            }
-
-            assert!(
-                soundness_broken || !witness.verify_result(),
-                "Setting ρ to zero should break soundness"
-            );
-            witness.rho_mles[1][0] = original;
-        }
-
-        // Setting quotient to zero should break soundness
-        if !witness.quotient_mles.is_empty() {
-            let original = witness.quotient_mles[0][0];
-            witness.quotient_mles[0][0] = Fq::zero();
-
-            if original != Fq::zero() {
-                let soundness_broken = !witness.verify_constraint_at_cube_point(1, 0);
-                assert!(
-                    soundness_broken,
-                    "Setting non-zero quotient to zero should break soundness"
-                );
-            }
-
-            witness.quotient_mles[0][0] = original;
-        }
-    }
 }

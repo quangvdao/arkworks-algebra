@@ -62,4 +62,4 @@ pub use fq12_poly::{
     to_multilinear_evals,
 };
 
-pub use witness_gen::{pow_with_steps_le, ExponentiationSteps};
+pub use witness_gen::ExponentiationSteps;
