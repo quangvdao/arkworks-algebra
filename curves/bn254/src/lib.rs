@@ -39,6 +39,7 @@ mod fields;
 #[cfg(feature = "curve")]
 pub use curves::*;
 
+#[allow(unused_imports)]
 pub use fields::*;
 
 #[cfg(feature = "r1cs")]
