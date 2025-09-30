@@ -493,7 +493,11 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         //     return Fp::zero();
         // }
         let fe = Self::from_bigint_mixed::<M>(x.magnitude);
-        if x.is_positive { fe } else { -fe }
+        if x.is_positive {
+            fe
+        } else {
+            -fe
+        }
     }
 
     /// Construct from a signed big integer with high 32-bit tail and K low 64-bit limbs.
@@ -503,13 +507,20 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     fn from_signed_bigint_hi32<const K: usize, const KPLUS1: usize>(
         x: crate::biginteger::SignedBigIntHi32<K>,
     ) -> Fp<MontBackend<Self, N>, N> {
-        debug_assert!(KPLUS1 == K + 1, "from_signed_bigint_hi32 requires KPLUS1 = K + 1");
+        debug_assert!(
+            KPLUS1 == K + 1,
+            "from_signed_bigint_hi32 requires KPLUS1 = K + 1"
+        );
         // if x.is_zero() {
         //     return Fp::zero();
         // }
         let mag = x.magnitude_as_bigint_nplus1::<KPLUS1>();
         let fe = Self::from_bigint_mixed::<KPLUS1>(mag);
-        if x.is_positive() { fe } else { -fe }
+        if x.is_positive() {
+            fe
+        } else {
+            -fe
+        }
     }
 
     #[inline]
@@ -882,9 +893,7 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// Implementation folds from high to low using the existing N+1 Barrett kernel.
     /// Precondition: L >= N. For performance, prefer small L close to N..N+3 when possible.
     #[inline(always)]
-    pub fn from_barrett_reduce<const L: usize, const NPLUS1: usize>(
-        unreduced: BigInt<L>,
-    ) -> Self {
+    pub fn from_barrett_reduce<const L: usize, const NPLUS1: usize>(unreduced: BigInt<L>) -> Self {
         debug_assert!(NPLUS1 == N + 1);
         debug_assert!(L >= N);
 
@@ -1094,6 +1103,14 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         *self = self.const_cios_mul_rhs_hi2(hi as u64, (hi >> 64) as u64);
     }
 
+    /// Returns self * rhs_high_limbs, where RHS is zero in low N-2 limbs and has its top two
+    /// limbs provided by `hi` (low 64 -> limb N-2, high 64 -> limb N-1). Equivalent to K=2.
+    /// At the cost 2 extra words of storage uses no bit shift instructions to extract higher limbs
+    /// as in mul_hi_u128
+    #[inline]
+    pub const fn mul_hi_bigint_u128(self, big_int_repre: [u64; 4]) -> Self {
+        self.const_cios_mul_rhs_hi2(big_int_repre[2], big_int_repre[3])
+    }
     /// Returns self * rhs_high_limbs, where RHS is zero in low N-2 limbs and has its top two
     /// limbs provided by `hi` (low 64 -> limb N-2, high 64 -> limb N-1). Equivalent to K=2.
     #[inline]
