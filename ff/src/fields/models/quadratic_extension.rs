@@ -130,7 +130,7 @@ impl<P: QuadExtConfig> QuadExtField<P> {
     /// = (a_0/a_1 - \sigma)/(a_0/a_1 + \sigma).
     /// The element a_0/a_1 is the compressed element lying inside in the torus.
     #[inline]
-    pub fn torus_compress_q_minus_one_pow(&self) -> P::BaseField {
+    pub fn torus_compress_base_order_minus_one_pow(&self) -> P::BaseField {
         self.c0 / self.c1
     }
 
