@@ -1,4 +1,4 @@
-use ark_ff::{fields::*, MontFp};
+use ark_ff::{MontFp, fields::*};
 
 use crate::bn254::*;
 
@@ -14,7 +14,7 @@ impl Fp2Config for Fq2Config {
 
     /// Coefficients for the Frobenius automorphism.
     const FROBENIUS_COEFF_FP2_C1: &'static [Fq] = &[
-        // NONRESIDUE**(((q^0) - 1) / 2)
+        // **(((q^0) - 1) / 2)
         Fq::ONE,
         // NONRESIDUE**(((q^1) - 1) / 2)
         MontFp!("-1"),

@@ -25,10 +25,10 @@ test_group!(g1; G1Projective; sw);
 // Add other tests for G2, Pairing etc. as needed
 #[cfg(test)]
 mod test {
-    use ark_ff::{Field, UniformRand};
+    use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, UniformRand};
     use ark_std::test_rng;
 
-    use crate::bn254::{Fq12, TorusCompressedFq12};
+    use crate::bn254::{Fq12, Fq12Config, Fq2, Fq6, Fq6Config, TorusCompressedFq12};
 
     #[test]
     fn test_compression() {
@@ -121,6 +121,17 @@ mod test {
         let mut rng = test_rng();
 
         // Sanity check computation
+
+        let quad_non_residue = <Fq12Config as Fp12Config>::NONRESIDUE;
+        let cubic_non_residue = <Fq6Config as Fp6Config>::NONRESIDUE;
+        let quad_part: ark_ff::CubicExtField<ark_ff::Fp6ConfigWrapper<Fq6Config>> =
+            quad_non_residue.square() * quad_non_residue;
+        let cubic_part = cubic_non_residue.square();
+        // assert_eq!(quad_part.c0, cubic_part);
+        // assert_eq!(quad_non_residue.c1, Fq2::ZERO);
+        // assert_eq!(quad_non_residue.c2, Fq2::ZERO);
+        assert_eq!(quad_non_residue.c0, cubic_non_residue);
+
         for _ in 0..num_trials {
             let a = Fq12::rand(&mut rng);
             let compressed = a.torus_compress_base_order_minus_one_pow();
