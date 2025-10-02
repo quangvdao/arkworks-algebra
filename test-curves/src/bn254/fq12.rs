@@ -1,64 +1,15 @@
-use ark_ff::{fields::*, MontFp};
+use ark_ff::{AdditiveGroup, Field, Fp12, Fp12Config, MontFp};
 
-use crate::bn254::*;
+use crate::bn254::{Fq, Fq2, Fq6, Fq6Config};
 
 pub type Fq12 = Fp12<Fq12Config>;
 
 #[derive(Clone, Copy)]
 pub struct Fq12Config;
 
-// Using the notation currently in use in the module, q = p.
-static Q2: [u64; 8] = [
-    0x3b5458a2275d69b1,
-    0xa602072d09eac101,
-    0x4a50189c6d96cadc,
-    0x04689e957a1242c8,
-    0x26edfa5c34c6b38d,
-    0xb00b855116375606,
-    0x599a6f7c0348d21c,
-    0x925c4b8763cbf9c,
-];
-
 // Implement the compression method in Proposition 1 of https://eprint.iacr.org/2007/429.pdf.
 #[derive(Clone, Copy)]
-pub struct TorusCompressedFq12(pub (Fq2, Fq2));
-
-impl TorusCompressedFq12 {
-    /// Compute the torus compressed form of element^(\psi_6(q^2)), where \psi_6 is the x^6 - 1 divided by the sixth cyclotomic polynomial.
-    /// p.10 Proposition 1 https://eprint.iacr.org/2007/429.pdf.
-    pub fn compress_psi_six_pow(element: Fq12) -> TorusCompressedFq12 {
-        let a_tilde = element.torus_compress_base_order_minus_one_pow();
-        let a_tilde_q_pow = a_tilde.pow(Q2);
-        let compressed: Fq6 = Fq12::mul_torus_compressed_elements(a_tilde_q_pow, a_tilde);
-        TorusCompressedFq12((compressed.c0, compressed.c1))
-    }
-
-    pub fn compress_to_fq6(element: Fq12) -> Fq6 {
-        let a_tilde = element.torus_compress_base_order_minus_one_pow();
-        let a_tilde_q_pow = a_tilde.pow(Q2);
-        if a_tilde_q_pow == a_tilde {
-            Fq6::ONE
-        } else {
-            Fq12::mul_torus_compressed_elements(-a_tilde_q_pow, a_tilde)
-        }
-    }
-
-    pub fn decompress(compressed: TorusCompressedFq12) -> Fq12 {
-        let b0 = Fq6::new(compressed.0 .0, Fq2::ZERO, Fq2::ZERO);
-        let b1 = Fq6::new(Fq2::ZERO, compressed.0 .1, Fq2::ZERO);
-        let b2 = (Fq6::from(3) * b0.pow([2 as u64]) + Fq12Config::NONRESIDUE)
-            / (Fq6::from(3) * b1 * Fq12Config::NONRESIDUE);
-
-        // #[cfg(test)]
-        // {
-        //     assert_eq!(b2.c0, Fq2::ZERO);
-        //     assert_eq!(b2.c2, Fq2::ZERO);
-        // }
-
-        let beta = Fp6::new(b0.c0, b1.c1, b2.c2);
-        Fq12::torus_decompress(beta)
-    }
-}
+pub struct CompressedFq12(pub (Fq, Fq));
 
 impl Fp12Config for Fq12Config {
     type Fp6Config = Fq6Config;
