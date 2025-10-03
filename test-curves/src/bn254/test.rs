@@ -44,7 +44,10 @@ mod test {
     use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, UniformRand};
     use ark_std::test_rng;
 
-    use crate::bn254::{CompressedFq12, CompressibleFq12, Fq12, Fq12Config, Fq2, Fq6, Fq6Config};
+    use crate::bn254::{
+        compressible_fq12_to_fq12, fq12_to_compressible_fq12, CompressibleFq12, Fq12, Fq12Config,
+        Fq2, Fq6, Fq6Config,
+    };
 
     #[test]
     fn test_compression() {
@@ -162,6 +165,20 @@ mod test {
             let compressed_prod = Fq12::mul_torus_compressed_elements(c1, c1);
 
             assert_ne!(Fq12::torus_decompress(compressed_prod), fq12_ele.pow(psi_6));
+        }
+
+        for _ in 0..num_trials {
+            let fq12_ele = Fq12::rand(&mut rng);
+            let compressible_fq12 = fq12_to_compressible_fq12(fq12_ele);
+            let fq12_back = compressible_fq12_to_fq12(compressible_fq12);
+            assert_eq!(fq12_ele, fq12_back);
+        }
+
+        for _ in 0..num_trials {
+            let compressible_fq12 = CompressibleFq12::rand(&mut rng);
+            let fq12_ele = compressible_fq12_to_fq12(compressible_fq12);
+            let compressible_fq12_back = fq12_to_compressible_fq12(fq12_ele);
+            assert_eq!(compressible_fq12, compressible_fq12_back);
         }
     }
 }

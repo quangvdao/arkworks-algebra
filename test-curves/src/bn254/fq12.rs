@@ -5,6 +5,34 @@ use crate::bn254::{Fq, Fq2, Fq6, Fq6Config};
 pub type Fq12 = Fp12<Fq12Config>;
 pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
 
+pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
+    // Divide by the generator of Fq6
+    let new_c1 = Fq6 {
+        c0: value.c1.c1,
+        c1: value.c1.c2,
+        c2: -value.c1.c0 * Fq6Config::NONRESIDUE.inverse().unwrap(),
+    };
+
+    CompressibleFq12 {
+        c0: value.c0,
+        c1: new_c1,
+    }
+}
+
+pub fn compressible_fq12_to_fq12(value: CompressibleFq12) -> Fq12 {
+    // Multiply by the generator of Fq6
+    let new_c1 = Fq6 {
+        c0: -value.c1.c2 * Fq6Config::NONRESIDUE,
+        c1: value.c1.c0,
+        c2: value.c1.c1,
+    };
+
+    Fq12 {
+        c0: value.c0,
+        c1: new_c1,
+    }
+}
+
 static COMPRESSIBLE_FROBENIUS_COEFFS: [Fq2; 4] = [
     Fq2::new(Fq::ONE, Fq::ZERO),
     Fq2::new(
@@ -25,8 +53,6 @@ static COMPRESSIBLE_FROBENIUS_COEFFS: [Fq2; 4] = [
 pub struct Fq12Config;
 
 // Implement the compression method in Proposition 1 of https://eprint.iacr.org/2007/429.pdf.
-#[derive(Clone, Copy)]
-pub struct CompressedFq12(pub (Fq, Fq));
 
 #[derive(Clone, Copy)]
 pub struct CompressibleFq12Config;
