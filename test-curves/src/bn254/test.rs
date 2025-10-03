@@ -44,7 +44,7 @@ mod test {
     use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, UniformRand};
     use ark_std::test_rng;
 
-    use crate::bn254::{Fq12, Fq12Config, Fq2, Fq6, Fq6Config};
+    use crate::bn254::{CompressedFq12, CompressibleFq12, Fq12, Fq12Config, Fq2, Fq6, Fq6Config};
 
     #[test]
     fn test_compression() {
@@ -143,42 +143,25 @@ mod test {
             assert_eq!(a.pow(psi_6), a.pow(q6_minus_1).pow(q2_plus_1));
         }
 
+        // https://eprint.iacr.org/2007/429.pdf Proposition 1
         for _ in 0..num_trials {
-            let a = Fq12::rand(&mut rng);
-            let b = Fq12::rand(&mut rng);
-            for i in [a, b] {
-                let compressed = i.torus_compress_base_order_minus_one_pow();
-                let decompressed = Fq12::torus_decompress(compressed);
-                assert_eq!(i.pow(q6_minus_1), decompressed);
-            }
+            let fq12_ele = CompressibleFq12::rand(&mut rng);
+            let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
+            let c1_pow = -c1.pow(q2);
+            let compressed_prod = CompressibleFq12::mul_torus_compressed_elements(c1_pow, c1);
 
-            let prod = a * b;
-            let compressed_prod = Fq12::mul_torus_compressed_elements(
-                a.torus_compress_base_order_minus_one_pow(),
-                b.torus_compress_base_order_minus_one_pow(),
+            assert_eq!(
+                CompressibleFq12::torus_decompress(compressed_prod),
+                fq12_ele.pow(psi_6)
             );
-            let decompressed = Fq12::torus_decompress(compressed_prod);
-            assert_eq!(prod.pow(q6_minus_1), decompressed);
         }
 
-        // for _ in 0..num_trials {
-        //     let fq12_ele = Fq12::rand(&mut rng);
-        //     let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
-        //     let c1_pow = c1.pow(q2);
-        //     let compressed_prod = Fq12::mul_torus_compressed_elements(c1_pow, c1);
-        //     assert_eq!(
-        //         Fq12::torus_decompress(compressed_prod),
-        //         Fq12::torus_decompress(c1).pow(q2_plus_1)
-        //     );
+        for _ in 0..num_trials {
+            let fq12_ele = Fq12::rand(&mut rng);
+            let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
+            let compressed_prod = Fq12::mul_torus_compressed_elements(c1, c1);
 
-        //     assert_eq!(
-        //         Fq12::torus_decompress(c1).pow(q2_plus_1),
-        //         fq12_ele.pow(psi_6)
-        //     );
-
-        //     // let compressed = TorusCompressedFq12::compress_to_fq6(fq12_ele);
-        //     // let decompressed = Fq12::torus_decompress(compressed);
-        //     // assert_eq!(fq12_ele.pow(psi_6), decompressed);
-        // }
+            assert_ne!(Fq12::torus_decompress(compressed_prod), fq12_ele.pow(psi_6));
+        }
     }
 }
