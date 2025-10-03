@@ -11,7 +11,7 @@ use num_integer::Integer;
 use num_traits::{One, Signed};
 
 /// GLV lambda for BN254 G1
-const LAMBDA: Fr =
+const _LAMBDA: Fr =
     MontFp!("21888242871839275217838484774961031246154997185409878258781734729429964517155");
 
 /// GLV endomorphism coefficient for BN254 G1

@@ -15,8 +15,10 @@ pub mod decomp_4d;
 pub mod dory_g1;
 pub mod dory_g2;
 pub mod dory_utils;
+pub mod fq12_poly;
 pub mod frobenius;
 pub mod glv_two;
+pub mod witness_gen;
 
 mod glv_four;
 pub use glv_four::{
@@ -54,3 +56,10 @@ pub use dory_g2::{
 };
 
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
+
+pub use fq12_poly::{
+    eq_weights, eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs,
+    g_eval, to_multilinear_evals,
+};
+
+pub use witness_gen::{get_g_mle, h_tilde_at_point, ExponentiationSteps};

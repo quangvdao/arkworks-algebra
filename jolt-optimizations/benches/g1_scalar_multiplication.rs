@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use rayon::prelude::*;
 
 use ark_bn254::{Fr, G1Affine, G1Projective};
-use ark_ec::{AdditiveGroup, AffineRepr, PrimeGroup};
+use ark_ec::{AffineRepr, PrimeGroup};
 use ark_ff::{PrimeField, UniformRand};
 use ark_std::test_rng;
 
