@@ -4,8 +4,9 @@ use crate::{
 };
 use allocative::Allocative;
 use ark_serialize::{
-    buffer_byte_size, CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
+    CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
     CanonicalSerializeWithFlags, Compress, EmptyFlags, Flags, SerializationError, Valid, Validate,
+    buffer_byte_size,
 };
 use ark_std::{
     cmp::*,
@@ -97,6 +98,11 @@ pub trait FpConfig<const N: usize>: Send + Sync + 'static + Sized {
     /// `0..(Self::MODULUS - 1)`. Returns `None` if the integer is outside
     /// this range.
     fn from_bigint(other: BigInt<N>) -> Option<Fp<Self, N>>;
+
+    /// Construct a field element from an integer in the range
+    /// `0..(Self::MODULUS - 1)`. Returns `None` if the integer is outside
+    /// this range (but do not do any Reductions)
+    fn from_bigint_unchecked(other: BigInt<N>) -> Option<Fp<Self, N>>;
 
     /// Convert a field element to an integer in the range `0..(Self::MODULUS -
     /// 1)`.
@@ -372,6 +378,11 @@ impl<P: FpConfig<N>, const N: usize> PrimeField for Fp<P, N> {
     }
 
     #[inline]
+    fn from_bigint_unchecked(r: BigInt<N>) -> Option<Self> {
+        P::from_bigint_unchecked(r)
+    }
+
+    #[inline]
     fn from_u64<const NPLUS1: usize>(r: u64) -> Option<Self> {
         P::from_u64::<NPLUS1>(r)
     }
@@ -433,11 +444,7 @@ impl<P: FpConfig<N>, const N: usize> From<u128> for Fp<P, N> {
 impl<P: FpConfig<N>, const N: usize> From<i128> for Fp<P, N> {
     fn from(other: i128) -> Self {
         let abs = Self::from(other.unsigned_abs());
-        if other.is_positive() {
-            abs
-        } else {
-            -abs
-        }
+        if other.is_positive() { abs } else { -abs }
     }
 }
 
@@ -464,11 +471,7 @@ impl<P: FpConfig<N>, const N: usize> From<u64> for Fp<P, N> {
 impl<P: FpConfig<N>, const N: usize> From<i64> for Fp<P, N> {
     fn from(other: i64) -> Self {
         let abs = Self::from(other.unsigned_abs());
-        if other.is_positive() {
-            abs
-        } else {
-            -abs
-        }
+        if other.is_positive() { abs } else { -abs }
     }
 }
 
@@ -485,11 +488,7 @@ impl<P: FpConfig<N>, const N: usize> From<u32> for Fp<P, N> {
 impl<P: FpConfig<N>, const N: usize> From<i32> for Fp<P, N> {
     fn from(other: i32) -> Self {
         let abs = Self::from(other.unsigned_abs());
-        if other.is_positive() {
-            abs
-        } else {
-            -abs
-        }
+        if other.is_positive() { abs } else { -abs }
     }
 }
 
@@ -506,11 +505,7 @@ impl<P: FpConfig<N>, const N: usize> From<u16> for Fp<P, N> {
 impl<P: FpConfig<N>, const N: usize> From<i16> for Fp<P, N> {
     fn from(other: i16) -> Self {
         let abs = Self::from(other.unsigned_abs());
-        if other.is_positive() {
-            abs
-        } else {
-            -abs
-        }
+        if other.is_positive() { abs } else { -abs }
     }
 }
 
@@ -527,11 +522,7 @@ impl<P: FpConfig<N>, const N: usize> From<u8> for Fp<P, N> {
 impl<P: FpConfig<N>, const N: usize> From<i8> for Fp<P, N> {
     fn from(other: i8) -> Self {
         let abs = Self::from(other.unsigned_abs());
-        if other.is_positive() {
-            abs
-        } else {
-            -abs
-        }
+        if other.is_positive() { abs } else { -abs }
     }
 }
 
@@ -554,7 +545,7 @@ impl<P: FpConfig<N>, const N: usize> ark_std::rand::distributions::Distribution<
                 u64::MAX >> shave_bits
             };
 
-            if let Some(val) = tmp.0 .0.last_mut() {
+            if let Some(val) = tmp.0.0.last_mut() {
                 *val &= mask
             }
 
