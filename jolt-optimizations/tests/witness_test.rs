@@ -1,10 +1,8 @@
 use ark_bn254::{Fq, Fq12, Fr};
-use ark_ff::{Field, One, UniformRand, Zero};
+use ark_ff::{One, UniformRand, Zero};
 use ark_std::test_rng;
 use jolt_optimizations::{
-    eval_multilinear, fq12_to_multilinear_evals, g_coeffs, to_multilinear_evals,
-    witness_gen::{get_g_mle, h_tilde_at_point},
-    ExponentiationSteps,
+    fq12_to_multilinear_evals, get_g_mle, h_tilde_at_point, ExponentiationSteps,
 };
 
 #[test]
@@ -90,7 +88,7 @@ fn test_trivial_cases() {
 fn test_witness_soundness() {
     let mut rng = test_rng();
 
-    // Test soundness: tampering with witness should be detected
+    // Test soundness: tampering with witness
     for test_idx in 0..20 {
         let base = Fq12::rand(&mut rng);
         let exponent = if test_idx == 0 {
@@ -113,7 +111,7 @@ fn test_witness_soundness() {
         }
         assert!(all_valid, "Original witness should be valid");
 
-        // Test 1: Tampering with ρ values breaks soundness
+        // Test 1: Tampering with ρ values
         if witness.rho_mles.len() > 1 {
             let tamper_idx = 1 + (test_idx % (witness.rho_mles.len() - 1));
             let point_idx = test_idx % 16;
@@ -141,7 +139,7 @@ fn test_witness_soundness() {
             witness.rho_mles[tamper_idx][point_idx] = original;
         }
 
-        // Test 2: Tampering with quotient values breaks soundness
+        // Test 2: Tampering with quotient
         if !witness.quotient_mles.is_empty() {
             let q_idx = test_idx % witness.quotient_mles.len();
             let point_idx = (test_idx * 7) % 16;
@@ -158,7 +156,7 @@ fn test_witness_soundness() {
             witness.quotient_mles[q_idx][point_idx] = original;
         }
 
-        // Test 3: Flipping bits breaks soundness
+        // Test 3: Flipping bits
         if !witness.bits.is_empty() {
             let bit_idx = test_idx % witness.bits.len();
             witness.bits[bit_idx] = !witness.bits[bit_idx];
@@ -175,7 +173,7 @@ fn test_witness_soundness() {
             witness.bits[bit_idx] = !witness.bits[bit_idx];
         }
 
-        // Test 4: Tampering with final result breaks verification
+        // Test 4: Tampering with final result
         let original_result = witness.result;
         witness.result = witness.result + Fq12::one();
         assert!(
@@ -232,8 +230,6 @@ fn test_constraint_at_random_field_element() {
             h
         );
     }
-
-    println!("✓ Verified: H̃(z) = 0 at 20 random field elements (Sumcheck correct)");
 
     for step in 1..=witness.num_steps() {
         for cube_idx in 0..16 {

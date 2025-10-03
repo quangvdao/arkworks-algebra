@@ -1,7 +1,10 @@
 use ark_bn254::Fq;
 use ark_ff::{Field, One, UniformRand, Zero};
 use ark_std::test_rng;
-use jolt_optimizations::fq12_poly::{eval_multilinear, eval_poly_vec, to_multilinear_evals};
+use jolt_optimizations::{
+    eval_multilinear,
+    fq12_poly::{eval_poly_vec, to_multilinear_evals},
+};
 
 /// Generate random polynomial coefficients for testing
 fn random_poly12_coeffs() -> [Fq; 12] {
