@@ -10,6 +10,18 @@ use core::{marker::PhantomData, ops::Not};
 
 type Fp2Config<P> = <<P as Fp12Config>::Fp6Config as Fp6Config>::Fp2Config;
 
+pub fn mul_fp6_by_nonresidue_010_in_place<P: Fp12Config>(
+    fe: &mut Fp6<P::Fp6Config>,
+) -> &mut Fp6<P::Fp6Config> {
+    // see [[DESD06, Section 6.1]](https://eprint.iacr.org/2006/471.pdf).
+    let old_c1 = fe.c1;
+    fe.c1 = fe.c0;
+    fe.c0 = fe.c2;
+    P::Fp6Config::mul_fp2_by_nonresidue_in_place(&mut fe.c0);
+    fe.c2 = old_c1;
+    fe
+}
+
 pub trait Fp12Config: 'static + Send + Sync + Copy {
     type Fp6Config: Fp6Config;
 
@@ -21,15 +33,10 @@ pub trait Fp12Config: 'static + Send + Sync + Copy {
     const FROBENIUS_COEFF_FP12_C1: &[Fp2<Fp2Config<Self>>];
 
     /// Multiply by quadratic nonresidue v.
+    /// TODO: previously implement the method in Section 6.1 https://eprint.iacr.org/2006/471.pdf, which assumes that the quadratic nonresidue is (0, 1, 0). However, this is not compatible with the torus compression method in the Compressible Pairing and Their Implementations paper, so the Fp12Config for compressible pairing needs to override this default method. In the future, we need to decide if we should remove the default implementation from trait definition in the first place.
     #[inline(always)]
     fn mul_fp6_by_nonresidue_in_place(fe: &mut Fp6<Self::Fp6Config>) -> &mut Fp6<Self::Fp6Config> {
-        // see [[DESD06, Section 6.1]](https://eprint.iacr.org/2006/471.pdf).
-        let old_c1 = fe.c1;
-        fe.c1 = fe.c0;
-        fe.c0 = fe.c2;
-        Self::Fp6Config::mul_fp2_by_nonresidue_in_place(&mut fe.c0);
-        fe.c2 = old_c1;
-        fe
+        mul_fp6_by_nonresidue_010_in_place::<Self>(fe)
     }
 }
 
