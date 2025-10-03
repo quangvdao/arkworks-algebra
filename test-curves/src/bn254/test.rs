@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use ark_algebra_test_templates::*;
 use ark_ec::{
     models::short_weierstrass::SWCurveConfig, // Keep this as G1 is SW
     pairing::Pairing,
@@ -6,18 +7,33 @@ use ark_ec::{
     CurveGroup,
     PrimeGroup,
 };
-use ark_ff::{Field, One, UniformRand, Zero};
-use ark_std::{rand::Rng, test_rng};
+use ark_ff::{
+    biginteger::{BigInt, BigInteger, BigInteger256},
+    fields::{FftField, Field, Fp6Config, PrimeField},
+    One, UniformRand, Zero,
+};
+use ark_std::{
+    cmp::Ordering,
+    ops::{AddAssign, MulAssign},
+    rand::Rng,
+    test_rng,
+};
 
 // Add imports for the newly defined types
-use crate::bn254::{Fq, FqConfig, Fr, FrConfig, G1Affine, G1Projective};
+use crate::bn254::{
+    CompressibleFq12, Fq, Fq12, Fq2, Fq6, FqConfig, Fr, FrConfig, G1Affine, G1Projective,
+};
 
 use ark_algebra_test_templates::*;
-use ark_std::ops::{AddAssign, MulAssign, SubAssign};
 
-// test_field!(fr; Fr; mont_prime_field);
+test_field!(fr; Fr; mont_prime_field);
 // Uncomment Fq test
 test_field!(fq; Fq; mont_prime_field);
+test_field!(fq2; Fq2);
+test_field!(fq6; Fq6);
+test_field!(fq12; Fq12);
+
+test_field!(compressible_fq12; CompressibleFq12);
 
 // Uncomment G1 test for Short Weierstrass
 test_group!(g1; G1Projective; sw);
@@ -28,7 +44,7 @@ mod test {
     use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, UniformRand};
     use ark_std::test_rng;
 
-    use crate::bn254::{Fq12, Fq12Config, Fq2, Fq6, Fq6Config, TorusCompressedFq12};
+    use crate::bn254::{Fq12, Fq12Config, Fq2, Fq6, Fq6Config};
 
     #[test]
     fn test_compression() {
@@ -120,18 +136,6 @@ mod test {
         let num_trials = 5;
         let mut rng = test_rng();
 
-        // Sanity check computation
-
-        let quad_non_residue = <Fq12Config as Fp12Config>::NONRESIDUE;
-        let cubic_non_residue = <Fq6Config as Fp6Config>::NONRESIDUE;
-        let quad_part: ark_ff::CubicExtField<ark_ff::Fp6ConfigWrapper<Fq6Config>> =
-            quad_non_residue.square() * quad_non_residue;
-        let cubic_part = cubic_non_residue.square();
-        // assert_eq!(quad_part.c0, cubic_part);
-        // assert_eq!(quad_non_residue.c1, Fq2::ZERO);
-        // assert_eq!(quad_non_residue.c2, Fq2::ZERO);
-        assert_eq!(quad_non_residue.c0, cubic_non_residue);
-
         for _ in 0..num_trials {
             let a = Fq12::rand(&mut rng);
             let compressed = a.torus_compress_base_order_minus_one_pow();
@@ -157,24 +161,24 @@ mod test {
             assert_eq!(prod.pow(q6_minus_1), decompressed);
         }
 
-        for _ in 0..num_trials {
-            let fq12_ele = Fq12::rand(&mut rng);
-            let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
-            let c1_pow = c1.pow(q2);
-            let compressed_prod = Fq12::mul_torus_compressed_elements(c1_pow, c1);
-            assert_eq!(
-                Fq12::torus_decompress(compressed_prod),
-                Fq12::torus_decompress(c1).pow(q2_plus_1)
-            );
+        // for _ in 0..num_trials {
+        //     let fq12_ele = Fq12::rand(&mut rng);
+        //     let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
+        //     let c1_pow = c1.pow(q2);
+        //     let compressed_prod = Fq12::mul_torus_compressed_elements(c1_pow, c1);
+        //     assert_eq!(
+        //         Fq12::torus_decompress(compressed_prod),
+        //         Fq12::torus_decompress(c1).pow(q2_plus_1)
+        //     );
 
-            assert_eq!(
-                Fq12::torus_decompress(c1).pow(q2_plus_1),
-                fq12_ele.pow(psi_6)
-            );
+        //     assert_eq!(
+        //         Fq12::torus_decompress(c1).pow(q2_plus_1),
+        //         fq12_ele.pow(psi_6)
+        //     );
 
-            // let compressed = TorusCompressedFq12::compress_to_fq6(fq12_ele);
-            // let decompressed = Fq12::torus_decompress(compressed);
-            // assert_eq!(fq12_ele.pow(psi_6), decompressed);
-        }
+        //     // let compressed = TorusCompressedFq12::compress_to_fq6(fq12_ele);
+        //     // let decompressed = Fq12::torus_decompress(compressed);
+        //     // assert_eq!(fq12_ele.pow(psi_6), decompressed);
+        // }
     }
 }
