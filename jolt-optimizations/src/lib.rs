@@ -58,8 +58,8 @@ pub use dory_g2::{
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
 
 pub use fq12_poly::{
-    eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs, g_eval,
-    to_multilinear_evals,
+    eq_weights, eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs,
+    g_eval, to_multilinear_evals,
 };
 
-pub use witness_gen::ExponentiationSteps;
+pub use witness_gen::{get_g_mle, h_tilde_at_point, ExponentiationSteps};

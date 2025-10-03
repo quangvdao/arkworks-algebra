@@ -1,6 +1,4 @@
-use crate::fq12_poly::{
-    eq_weights, eval_multilinear, fq12_to_multilinear_evals, g_coeffs, to_multilinear_evals,
-};
+use crate::fq12_poly::{eq_weights, eval_multilinear, fq12_to_multilinear_evals, g_coeffs};
 use ark_bn254::{Fq, Fq12, Fr};
 use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -82,15 +80,13 @@ impl ExponentiationSteps {
         }
     }
 
-    /// Verify that the final result matches base^exponent,
-    /// Used for testing
+    /// Verify that the final result matches base^exponent
     pub fn verify_result(&self) -> bool {
         self.result == self.base.pow(self.exponent.into_bigint())
     }
 
     /// Verify constraint at a Boolean cube point
     /// Checks that the constraint holds at cube vertices where it was constructed to be zero
-    /// Used for testing
     pub fn verify_constraint_at_cube_point(&self, step: usize, cube_index: usize) -> bool {
         if step == 0 || step > self.quotient_mles.len() || cube_index >= 16 {
             return false;
@@ -144,23 +140,20 @@ fn compute_step_quotient_msb(rho_prev: Fq12, rho_i: Fq12, base: Fq12, bit: bool)
 }
 
 /// Get g as MLE evaluations over the Boolean cube {0,1}^4
-/// Used for testing
 pub fn get_g_mle() -> Vec<Fq> {
-    // Use the same encoding as fq12_to_multilinear_evals
-    // g(X) = X^12 - 18X^6 + 82 as coefficient array
+    use crate::fq12_poly::eval_poly_vec;
     let g_vec = g_coeffs();
-    let mut g_array = [Fq::zero(); 12];
-    for i in 0..12 {
-        if i < g_vec.len() {
-            g_array[i] = g_vec[i];
-        }
-    }
-    to_multilinear_evals(&g_array)
+
+    (0..16)
+        .map(|i| {
+            let x = Fq::from(i as u64);
+            eval_poly_vec(&g_vec[..], &x)
+        })
+        .collect()
 }
 
 /// Convert a cube index (0..15) to a Boolean point in {0,1}^4
-/// Used for testing
-pub fn index_to_boolean_point(index: usize) -> Vec<Fq> {
+pub(crate) fn index_to_boolean_point(index: usize) -> Vec<Fq> {
     vec![
         Fq::from((index & 1) as u64),        // bit 0
         Fq::from(((index >> 1) & 1) as u64), // bit 1
@@ -171,7 +164,6 @@ pub fn index_to_boolean_point(index: usize) -> Vec<Fq> {
 
 /// Evaluate an MLE at a Boolean cube point
 /// For Boolean points, this is equivalent to indexing but makes the evaluation explicit
-/// Used for testing
 fn eval_mle_at_boolean_point(mle: &[Fq], point: &[Fq]) -> Fq {
     // For Boolean points, we could just index, but using eval_multilinear
     // makes it clear we're doing MLE evaluation
@@ -180,7 +172,6 @@ fn eval_mle_at_boolean_point(mle: &[Fq], point: &[Fq]) -> Fq {
 
 /// H(x) = ρᵢ(x) - ρᵢ₋₁(x)² · A(x)^{bᵢ} - Qᵢ(x) · g(x) for x ∈ {0,1}^4
 /// H̃(z) = Σ_{x∈{0,1}^4} eq(z,x) · H(x)
-/// Used for testing
 pub fn h_tilde_at_point(
     rho_prev_mle: &[Fq],
     rho_curr_mle: &[Fq],

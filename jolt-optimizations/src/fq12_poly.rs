@@ -2,8 +2,6 @@
 use ark_bn254::{Fq, Fq12};
 use ark_ff::{Field, One, Zero};
 
-const NINE: u64 = 9;
-
 /// Convert Fq12 to polynomial representation using tower basis mapping
 ///
 /// Maps Fq12 basis elements to powers of w:
@@ -20,7 +18,7 @@ pub fn fq12_to_poly12_coeffs(a: &Fq12) -> [Fq; 12] {
         (1, 2, 5), // a.c1.c2 → w^5
     ];
 
-    let nine = Fq::from(NINE);
+    let nine = Fq::from(9);
     let mut coeffs = [Fq::zero(); 12];
 
     for &(outer, inner, w_power) in &MAPPINGS {
@@ -111,7 +109,6 @@ pub fn eval_multilinear(evals: &[Fq], point: &[Fq]) -> Fq {
 }
 
 /// Compute equality function weights eq(z, x) for all x ∈ {0,1}^4
-/// Helper for testing in arkworks
 pub fn eq_weights(z: &[Fq]) -> Vec<Fq> {
     assert_eq!(z.len(), 4, "Point z must be 4-dimensional");
     let mut w = vec![Fq::zero(); 16];
