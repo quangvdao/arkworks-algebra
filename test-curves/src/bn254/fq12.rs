@@ -20,6 +20,7 @@ static Q: [u64; 8] = [
 pub struct CompressedFq2(pub (Fq2, Fq2));
 
 impl CompressedFq2 {
+    #[inline]
     pub fn decompress(self) -> CompressibleFq12 {
         // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
         let c2 = (Fq2::from(3) * self.0 .0.square() + Fq6Config::NONRESIDUE)
@@ -34,23 +35,12 @@ impl CompressedFq2 {
     }
 }
 
+#[inline]
 pub fn torus_compress_fq6(element: Fq6) -> CompressedFq2 {
-    // Check root of unity relation.
-    let res = Fq6Config::NONRESIDUE.pow(Q);
-    let res = res * Fq6Config::NONRESIDUE.inverse().unwrap();
-    assert_eq!(res.pow([3u64]), Fq2::ONE);
-    // panic!("res = {:?}", res);
-
-    let c2 = (Fq2::from(3) * element.c0.square() + Fq6Config::NONRESIDUE)
-        * (Fq2::from(3) * element.c1 * Fq6Config::NONRESIDUE)
-            .inverse()
-            .unwrap_or_else(|| panic!("c1 cannot be zero for an element with norm 1."));
-    assert_eq!(c2, element.c2);
-    // assert_eq!(val, Fq2::ZERO);
     CompressedFq2((element.c0, element.c1))
 }
 
-// TODO: this function can be generalized for any cubic extension using Hilbert 90.
+#[inline]
 pub fn torus_decompress_fq6(element: CompressedFq2) -> Fq6 {
     let c2 = (Fq2::from(3) * element.0 .0.square() + Fq6Config::NONRESIDUE)
         * (Fq2::from(3) * element.0 .1 * Fq6Config::NONRESIDUE)
@@ -70,6 +60,7 @@ pub fn torus_compress_psi_6_pow_to_two_fq2(element: CompressibleFq12) -> Compres
     CompressedFq2((compressed_prod.c0, compressed_prod.c1))
 }
 
+#[inline]
 pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
     // Divide by the generator of Fq6
     let new_c1 = Fq6 {
@@ -84,6 +75,7 @@ pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
     }
 }
 
+#[inline]
 pub fn compressible_fq12_to_fq12(value: CompressibleFq12) -> Fq12 {
     // Multiply by the generator of Fq6
     let new_c1 = Fq6 {
