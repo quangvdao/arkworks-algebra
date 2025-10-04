@@ -5,6 +5,72 @@ use crate::bn254::{Fq, Fq2, Fq6, Fq6Config};
 pub type Fq12 = Fp12<Fq12Config>;
 pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
 
+static Q: [u64; 8] = [
+    0x3b5458a2275d69b1,
+    0xa602072d09eac101,
+    0x4a50189c6d96cadc,
+    0x04689e957a1242c8,
+    0x26edfa5c34c6b38d,
+    0xb00b855116375606,
+    0x599a6f7c0348d21c,
+    0x925c4b8763cbf9c,
+];
+
+// https://eprint.iacr.org/2007/429.pdf Proposition 1
+pub struct CompressedFq2(pub (Fq2, Fq2));
+
+impl CompressedFq2 {
+    pub fn decompress(self) -> CompressibleFq12 {
+        // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
+        let c2 = (Fq2::from(3) * self.0 .0.square() + Fq6Config::NONRESIDUE)
+            * (Fq2::from(3) * self.0 .1 * Fq6Config::NONRESIDUE)
+                .inverse()
+                .unwrap();
+        CompressibleFq12::torus_decompress(Fq6 {
+            c0: self.0 .0,
+            c1: self.0 .1,
+            c2,
+        })
+    }
+}
+
+pub fn torus_compress_fq6(element: Fq6) -> CompressedFq2 {
+    // Check root of unity relation.
+    let res = Fq6Config::NONRESIDUE.pow(Q);
+    let res = res * Fq6Config::NONRESIDUE.inverse().unwrap();
+    assert_eq!(res.pow([3u64]), Fq2::ONE);
+    // panic!("res = {:?}", res);
+
+    let c2 = (Fq2::from(3) * element.c0.square() + Fq6Config::NONRESIDUE)
+        * (Fq2::from(3) * element.c1 * Fq6Config::NONRESIDUE)
+            .inverse()
+            .unwrap_or_else(|| panic!("c1 cannot be zero for an element with norm 1."));
+    assert_eq!(c2, element.c2);
+    // assert_eq!(val, Fq2::ZERO);
+    CompressedFq2((element.c0, element.c1))
+}
+
+// TODO: this function can be generalized for any cubic extension using Hilbert 90.
+pub fn torus_decompress_fq6(element: CompressedFq2) -> Fq6 {
+    let c2 = (Fq2::from(3) * element.0 .0.square() + Fq6Config::NONRESIDUE)
+        * (Fq2::from(3) * element.0 .1 * Fq6Config::NONRESIDUE)
+            .inverse()
+            .unwrap_or_else(|| panic!("c1 cannot be zero for an element with norm 1."));
+    Fq6 {
+        c0: element.0 .0,
+        c1: element.0 .1,
+        c2,
+    }
+}
+
+// TODO: this function can be generalized for any cubic extension using Hilbert 90.
+pub fn torus_compress_psi_6_pow(element: CompressibleFq12) -> CompressedFq2 {
+    let c1 = element.c0 / element.c1;
+    let c1_pow = -c1.pow(Q);
+    let compressed_prod = CompressibleFq12::mul_torus_compressed_elements(c1_pow, c1);
+    CompressedFq2((compressed_prod.c0, compressed_prod.c1))
+}
+
 pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
     // Divide by the generator of Fq6
     let new_c1 = Fq6 {
