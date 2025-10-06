@@ -9,8 +9,6 @@
 //! Uses Strauss-shamir batched scalar multiplication to maximally take advantage of GLV.
 
 pub mod batch_addition;
-pub mod block_subset_msm;
-pub mod block_subset_msm_simple;
 pub mod constants;
 pub mod decomp_2d;
 pub mod decomp_4d;
