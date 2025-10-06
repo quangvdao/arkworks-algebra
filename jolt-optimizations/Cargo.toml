@@ -13,13 +13,13 @@ metadata.docs.rs.workspace = true
 description = "Optimized BN254 G1/G2 scalar multiplication primitives using 2D/4D GLV decomposition"
 
 [dependencies]
-ark-bn254 = "0.5.0"
+ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-serialize.workspace = true
 ark-std.workspace = true
 num-bigint.workspace = true
-num-rational = "0.4.2"
+num-rational.workspace = true
 num-integer.workspace = true
 num-traits.workspace = true
 rayon.workspace = true
