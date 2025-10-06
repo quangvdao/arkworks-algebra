@@ -9,6 +9,8 @@
 //! Uses Strauss-shamir batched scalar multiplication to maximally take advantage of GLV.
 
 pub mod batch_addition;
+pub mod block_subset_msm;
+pub mod block_subset_msm_simple;
 pub mod constants;
 pub mod decomp_2d;
 pub mod decomp_4d;
@@ -56,6 +58,11 @@ pub use dory_g2::{
 };
 
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
+
+pub use block_subset_msm::{
+    batch_sum_one_hot, build_block_subset_tables, histogram_counts, sum_direct_gather_reduce,
+    sum_with_block_tables_binary, sum_with_block_tables_radix, BlockSubsetTable, BuildParams,
+};
 
 pub use fq12_poly::{
     eq_weights, eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs,
