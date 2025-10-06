@@ -22,6 +22,7 @@ use ark_std::{
 // Add imports for the newly defined types
 use crate::bn254::{
     CompressibleFq12, Fq, Fq12, Fq2, Fq6, FqConfig, Fr, FrConfig, G1Affine, G1Projective,
+    G2Projective,
 };
 
 use ark_algebra_test_templates::*;
@@ -32,61 +33,76 @@ test_field!(fq; Fq; mont_prime_field);
 test_field!(fq2; Fq2);
 test_field!(fq6; Fq6);
 test_field!(fq12; Fq12);
-
 test_field!(compressible_fq12; CompressibleFq12);
 
 // Uncomment G1 test for Short Weierstrass
 test_group!(g1; G1Projective; sw);
+test_group!(g2; G2Projective; sw);
+test_group!(g1_glv; G1Projective; glv);
+test_group!(g2_glv; G2Projective; glv);
+test_group!(pairing_output; ark_ec::pairing::PairingOutput<crate::bn254::Bn254>; msm);
+test_pairing!(pairing; crate::bn254::Bn254);
+
+// TODO:
+// test_group!(compressible_pairing_output; ark_ec::pairing::PairingOutput<crate::bn254::CompressibleBn254>; msm);
+
+test_pairing!(compressible_pairing; crate::bn254::CompressibleBn254);
 
 // Add other tests for G2, Pairing etc. as needed
 #[cfg(test)]
 mod test {
-    use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, UniformRand};
+    use ark_ec::{
+        bn::{raise_to_psi_six_pow, raise_to_sixth_cyclotomic_polynomial, G1Prepared, G2Prepared},
+        pairing::Pairing,
+    };
+    use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, MontFp, UniformRand};
     use ark_std::test_rng;
 
     use crate::bn254::{
         compressible_fq12_to_fq12, fq12_to_compressible_fq12, torus_compress_fq6,
-        torus_compress_psi_6_pow, torus_decompress_fq6, CompressibleFq12, Fq12, Fq12Config, Fq2,
-        Fq6, Fq6Config,
+        torus_compress_psi_6_pow, torus_decompress_fq6, Bn254, CompressibleBn254,
+        CompressibleConfig, CompressibleFq12, Config, Fq12, Fq12Config, Fq2, Fq6, Fq6Config,
+        G1Projective, G2Projective,
     };
+    use ark_ec::{pairing::*, CurveGroup, PrimeGroup};
+
+    const PSI_6: [u64; 32] = [
+        0x72ab9d4cf9110b20,
+        0x973cd2a37a1b4236,
+        0x1ba98b1bc336a6d5,
+        0x2dfcbbaca5d60846,
+        0xd5439cc568e9448a,
+        0xe1db0edd8549f5a5,
+        0x6f93e1753d4af731,
+        0x49c8a9c36c6fee88,
+        0x15f3f80815d4b9fa,
+        0x1ba650a506fe3ed0,
+        0xaefe7d8fff4f3dff,
+        0x6ac0657132447def,
+        0xf1f3ac284dd0152c,
+        0x37018c9976be9e50,
+        0x22c60855715fb2d0,
+        0x208847a342f135b0,
+        0x3ee1e2cb94f42a1d,
+        0x3c4a7ccbcfffdab3,
+        0xad8c7c82ecaf3f33,
+        0x6ca3fffc37db0759,
+        0x37cd075497b1b668,
+        0xea10af7b063fb6d2,
+        0x4c05f030809f6505,
+        0x2a2ce31f8f0d0104,
+        0x8cabad13097c3c76,
+        0x4d2a25ff065eb903,
+        0xa3df56ffaff05a83,
+        0x2d5b0867d19408a1,
+        0x223eaadf9b381c71,
+        0xe8809c2c51000097,
+        0x0e97a02f2739dcf3,
+        0x1b59e685800b,
+    ];
 
     #[test]
     fn test_compression() {
-        let psi_6: [u64; 32] = [
-            0x72ab9d4cf9110b20,
-            0x973cd2a37a1b4236,
-            0x1ba98b1bc336a6d5,
-            0x2dfcbbaca5d60846,
-            0xd5439cc568e9448a,
-            0xe1db0edd8549f5a5,
-            0x6f93e1753d4af731,
-            0x49c8a9c36c6fee88,
-            0x15f3f80815d4b9fa,
-            0x1ba650a506fe3ed0,
-            0xaefe7d8fff4f3dff,
-            0x6ac0657132447def,
-            0xf1f3ac284dd0152c,
-            0x37018c9976be9e50,
-            0x22c60855715fb2d0,
-            0x208847a342f135b0,
-            0x3ee1e2cb94f42a1d,
-            0x3c4a7ccbcfffdab3,
-            0xad8c7c82ecaf3f33,
-            0x6ca3fffc37db0759,
-            0x37cd075497b1b668,
-            0xea10af7b063fb6d2,
-            0x4c05f030809f6505,
-            0x2a2ce31f8f0d0104,
-            0x8cabad13097c3c76,
-            0x4d2a25ff065eb903,
-            0xa3df56ffaff05a83,
-            0x2d5b0867d19408a1,
-            0x223eaadf9b381c71,
-            0xe8809c2c51000097,
-            0x0e97a02f2739dcf3,
-            0x1b59e685800b,
-        ];
-
         let q2: [u64; 8] = [
             0x3b5458a2275d69b1,
             0xa602072d09eac101,
@@ -111,7 +127,7 @@ mod test {
 
             assert_eq!(
                 CompressibleFq12::torus_decompress(compressed_prod),
-                fq12_ele.pow(psi_6)
+                fq12_ele.pow(PSI_6)
             );
             let compressed_fq6 = torus_compress_fq6(compressed_prod);
             let decompressed_fq6 = torus_decompress_fq6(compressed_fq6);
@@ -125,7 +141,7 @@ mod test {
             let c1_pow = -c1.pow(q2);
             let compressed_prod = Fq12::mul_torus_compressed_elements(c1_pow, c1);
 
-            assert_ne!(Fq12::torus_decompress(compressed_prod), fq12_ele.pow(psi_6));
+            assert_ne!(Fq12::torus_decompress(compressed_prod), fq12_ele.pow(PSI_6));
         }
 
         // Test compression of an CompressibleFq12 element e2e.
@@ -133,26 +149,159 @@ mod test {
             let compressible_fq12 = CompressibleFq12::rand(&mut rng);
             let compressed_fq12 = torus_compress_psi_6_pow(compressible_fq12);
             let decompressed_fq12 = compressed_fq12.decompress();
-            assert_eq!(compressible_fq12.pow(psi_6), decompressed_fq12);
+            assert_eq!(compressible_fq12.pow(PSI_6), decompressed_fq12);
         }
     }
 
+    #[test]
     fn test_compressible_fq12_to_fq12_conversion() {
-        let num_trials = 5;
+        let num_trials = 100;
         let mut rng = test_rng();
 
+        let x = Fq6 {
+            c0: Fq2::ZERO,
+            c1: Fq2::ONE,
+            c2: Fq2::ZERO,
+        };
+
+        for _ in 0..num_trials {
+            // a = c0 + c1 * residue^(1/2)
+            let a = CompressibleFq12::rand(&mut rng);
+            // a_prime = c0 + c1 * x * residue^(1/6), where x = residue^(1/3)
+            let a_prime = compressible_fq12_to_fq12(a);
+            assert_eq!(a_prime.c1, x * a.c1);
+        }
+
+        for _ in 0..num_trials {
+            // a = c0 + c1 * residue^(1/6)
+            let a = Fq12::rand(&mut rng);
+            // a_prime = c0 + c1 / x * residue^(1/2), where x = residue^(1/3)
+            let a_prime = fq12_to_compressible_fq12(a);
+            assert_eq!(a_prime.c1, x.inverse().unwrap() * a.c1);
+        }
+
+        // Check inverses
         for _ in 0..num_trials {
             let fq12_ele = Fq12::rand(&mut rng);
             let compressible_fq12 = fq12_to_compressible_fq12(fq12_ele);
             let fq12_back = compressible_fq12_to_fq12(compressible_fq12);
             assert_eq!(fq12_ele, fq12_back);
-        }
 
-        for _ in 0..num_trials {
             let compressible_fq12 = CompressibleFq12::rand(&mut rng);
             let fq12_ele = compressible_fq12_to_fq12(compressible_fq12);
             let compressible_fq12_back = fq12_to_compressible_fq12(fq12_ele);
             assert_eq!(compressible_fq12, compressible_fq12_back);
+        }
+
+        // Homomorphic property
+        for _ in 0..num_trials {
+            let a = CompressibleFq12::rand(&mut rng);
+            let b = CompressibleFq12::rand(&mut rng);
+            let c = a * b;
+            let a_prime = compressible_fq12_to_fq12(a);
+            let b_prime = compressible_fq12_to_fq12(b);
+            let c_prime = compressible_fq12_to_fq12(c);
+            assert_eq!(a_prime * b_prime, c_prime);
+
+            let a = Fq12::rand(&mut rng);
+            let b = Fq12::rand(&mut rng);
+            let c = a * b;
+            let a_prime = fq12_to_compressible_fq12(a);
+            let b_prime = fq12_to_compressible_fq12(b);
+            let c_prime = fq12_to_compressible_fq12(c);
+            assert_eq!(a_prime * b_prime, c_prime);
+        }
+
+        // Check that converting an Fq12 element to a CompressibleFq12 element before compressing its psi_6 power works, where decompressing is simply converting back to an Fq12 element.
+        for _ in 0..num_trials {
+            let a = Fq12::rand(&mut rng);
+            let a_prime = fq12_to_compressible_fq12(a);
+            let compressed = torus_compress_psi_6_pow(a_prime);
+
+            let decompressed = compressed.decompress();
+            let decompressed_fq12 = compressible_fq12_to_fq12(decompressed);
+            assert_eq!(a.pow(PSI_6), decompressed_fq12);
+        }
+    }
+
+    const D: [u64; 12] = [
+        0xe81bb482ccdf42b1,
+        0x5abf5cc4f49c36d4,
+        0xf1154e7e1da014fd,
+        0xdcc7b44c87cdbacf,
+        0xaaa441e3954bcf8a,
+        0x6b887d56d5095f23,
+        0x79581e16f3fd90c6,
+        0x3b1b1355d189227d,
+        0x4e529a5861876f6b,
+        0x6c0eb522d5b12278,
+        0x331ec15183177faf,
+        0x1baaa710b0759ad,
+    ];
+
+    const D_PRIME: [u64; 15] = [
+        0xcaa4152366144ab4,
+        0x114dc0ec2cab7ffd,
+        0x0cf0888c7a0ff6cf,
+        0x65c5644e949b6a90,
+        0x1be2458885117085,
+        0x5b35eb719e58db4b,
+        0x2566c550aeb7e0e2,
+        0x0c974024a316619f,
+        0xd147cb7d3a5203dc,
+        0x621d9bfed77c2ad0,
+        0x26473fbcd1c3ec1e,
+        0xe86518527b5e4036,
+        0x29259e9712ca7b71,
+        0x1891045f68d15763,
+        0x679dd974c68787,
+    ];
+
+    #[test]
+    fn test_compressible_pairing() {
+        let num_trials = 10;
+        let mut rng = test_rng();
+        for _ in 0..num_trials {
+            let g1 = G1Projective::rand(&mut rng);
+            let g2 = G2Projective::rand(&mut rng);
+            let g1_prepared: G1Prepared<Config> = g1.clone().into();
+            let g2_prepared: G2Prepared<Config> = g2.clone().into();
+            let pairing = Bn254::multi_miller_loop([g1_prepared], [g2_prepared]);
+            // let fq12 = Fq12::rand(&mut rng);
+            let fq12 = CompressibleBn254::multi_miller_loop([g1], [g2]).0;
+            // let fq12 = Bn254::pairing(g1, g2).0;
+
+            // let compressed_pow = torus_compress_psi_6_pow(fq12);
+            // let psi_6_pow = raise_to_psi_six_pow::<Config>(fq12).unwrap();
+            // let decompressed_pow = compressed_pow.decompress();
+            // assert_eq!(psi_6_pow, fq12.pow(PSI_6));
+            // assert_eq!(decompressed_pow, psi_6_pow);
+
+            // let pow = raise_to_sixth_cyclotomic_polynomial::<Config>(fq12);
+            let pow = fq12.pow(D_PRIME);
+            let pow = raise_to_psi_six_pow::<CompressibleConfig>(pow).unwrap();
+
+            let other = raise_to_psi_six_pow::<CompressibleConfig>(fq12).unwrap();
+            // assert_eq!(
+            //     other.pow(D_PRIME),
+            //     raise_to_sixth_cyclotomic_polynomial::<CompressibleConfig>(other)
+            // );
+            // let other = raise_to_sixth_cyclotomic_polynomial::<Config>(other);
+            let other = other.pow(D_PRIME);
+            assert_eq!(pow, other, "fq12: {:?}", fq12);
+
+            // let res = raise_to_sixth_cyclotomic_polynomial::<CompressibleConfig>(fq12);
+            let res = fq12.pow(D_PRIME);
+            let compressed_pow = torus_compress_psi_6_pow(res);
+            assert_eq!(compressed_pow.decompress(), pow);
+
+            // let g1 = G1Projective::rand(&mut rng);
+            // let g2 = G2Projective::rand(&mut rng);
+            // let pairing = Bn254::pairing(g1, g2);
+            // let other = raise_to_psi_six_pow::<Bn254>();
+
+            // let compressible_pairing = CompressibleBn254::pairing(g1, g2);
+            // assert_eq!(pairing.0, compressible_pairing.0);
         }
     }
 }
