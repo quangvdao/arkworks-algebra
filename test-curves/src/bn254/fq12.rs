@@ -76,7 +76,7 @@ pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
     let new_c1 = Fq6 {
         c0: value.c1.c1,
         c1: value.c1.c2,
-        c2: -value.c1.c0 * Fq6Config::NONRESIDUE.inverse().unwrap(),
+        c2: value.c1.c0 * Fq6Config::NONRESIDUE.inverse().unwrap(),
     };
 
     CompressibleFq12 {
@@ -88,7 +88,7 @@ pub fn fq12_to_compressible_fq12(value: Fq12) -> CompressibleFq12 {
 pub fn compressible_fq12_to_fq12(value: CompressibleFq12) -> Fq12 {
     // Multiply by the generator of Fq6
     let new_c1 = Fq6 {
-        c0: -value.c1.c2 * Fq6Config::NONRESIDUE,
+        c0: value.c1.c2 * Fq6Config::NONRESIDUE,
         c1: value.c1.c0,
         c2: value.c1.c1,
     };
