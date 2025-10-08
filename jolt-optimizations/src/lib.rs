@@ -10,8 +10,6 @@
 
 pub mod batch_addition;
 pub mod constants;
-pub mod msm_bucket;
-pub mod small_row;
 pub mod decomp_2d;
 pub mod decomp_4d;
 pub mod dory_g1;
@@ -20,6 +18,8 @@ pub mod dory_utils;
 pub mod fq12_poly;
 pub mod frobenius;
 pub mod glv_two;
+pub mod msm_bucket;
+pub mod small_row;
 pub mod witness_gen;
 
 mod glv_four;
@@ -57,13 +57,10 @@ pub use dory_g2::{
     vector_add_scalar_mul_g2_windowed2_signed, vector_scalar_mul_add_gamma_g2_online,
 };
 
-pub use batch_addition::{
-    batch_g1_additions, batch_g1_additions_multi, msm_rows_mixed_bn254,
-    msm_rows_mixed_bn254_projective, SmallRow as SmallRowOld, DEFAULT_MAX_ROW_CAPACITY,
-};
+pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
 
-pub use small_row::SmallRow;
 pub use msm_bucket::{msm_rows_bucket_affine, msm_rows_bucket_projective};
+pub use small_row::SmallRow;
 
 pub use fq12_poly::{
     eq_weights, eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs,
