@@ -244,12 +244,6 @@ pub fn msm_rows_mixed_bn254<const K: usize>(
         rows.len(),
         "Key length must equal number of rows"
     );
-    let n = rows.len();
-
-    if n == 0 {
-        return Vec::new();
-    }
-
     let proj: Vec<G1Projective> = rows
         .par_iter()
         .map(|row| {

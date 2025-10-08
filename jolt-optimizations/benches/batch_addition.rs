@@ -1,17 +1,18 @@
-use ark_bn254::G1Affine;
-use ark_ec::{AffineRepr, CurveGroup};
+use ark_bn254::{G1Affine, G1Projective};
+use ark_ec::CurveGroup;
 use ark_std::rand::RngCore;
 use ark_std::UniformRand;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use jolt_optimizations::{batch_g1_additions_multi, msm_rows_mixed_bn254, SmallRow};
-use rayon::prelude::*;
+use jolt_optimizations::{
+    batch_g1_additions_multi, msm_rows_mixed_bn254, msm_rows_mixed_bn254_projective, SmallRow,
+};
 
 fn bench_msm_rows_mixed(c: &mut Criterion) {
     let mut group = c.benchmark_group("msm_rows_mixed");
     let mut rng = ark_std::test_rng();
     group.sample_size(10);
     // Test different matrix sizes
-    for &(n, k) in &[(1024, 512), (4096, 2048)] {
+    for &(n, k) in &[(1 << 16, 512)] {
         let key: Vec<G1Affine> = (0..n).map(|_| G1Affine::rand(&mut rng)).collect();
 
         let rows: Vec<SmallRow> = (0..n)
@@ -33,6 +34,25 @@ fn bench_msm_rows_mixed(c: &mut Criterion) {
                 b.iter(|| black_box(msm_rows_mixed_bn254(key, rows)));
             },
         );
+
+        group.bench_with_input(
+            BenchmarkId::new("projective_only", &name),
+            &(&key, &rows, k),
+            |b, (key, rows, k)| {
+                b.iter(|| black_box(msm_rows_mixed_bn254_projective(key, rows, *k)));
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("projective_plus_normalize", &name),
+            &(&key, &rows, k),
+            |b, (key, rows, k)| {
+                b.iter(|| {
+                    let proj = msm_rows_mixed_bn254_projective(key, rows, *k);
+                    black_box(G1Projective::normalize_batch(&proj))
+                });
+            },
+        );
     }
 
     group.finish();
@@ -42,8 +62,8 @@ fn bench_msm_rows_vs_batch_additions(c: &mut Criterion) {
     let mut group = c.benchmark_group("msm_comparison");
     let mut rng = ark_std::test_rng();
     group.sample_size(10);
-    let n = 2048;
-    let k = 1024;
+    let n = 1 << 16;
+    let k = 512;
 
     let key: Vec<G1Affine> = (0..n).map(|_| G1Affine::rand(&mut rng)).collect();
 
@@ -59,6 +79,17 @@ fn bench_msm_rows_vs_batch_additions(c: &mut Criterion) {
 
     group.bench_function("msm_rows_mixed", |b| {
         b.iter(|| black_box(msm_rows_mixed_bn254(&key, &rows)));
+    });
+
+    group.bench_function("msm_rows_projective", |b| {
+        b.iter(|| black_box(msm_rows_mixed_bn254_projective(&key, &rows, k)));
+    });
+
+    group.bench_function("msm_rows_proj_plus_norm", |b| {
+        b.iter(|| {
+            let proj = msm_rows_mixed_bn254_projective(&key, &rows, k);
+            black_box(G1Projective::normalize_batch(&proj))
+        });
     });
 
     // Convert to old format for comparison
