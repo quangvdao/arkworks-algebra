@@ -56,8 +56,8 @@ pub use dory_g2::{
 };
 
 pub use batch_addition::{
-    batch_g1_additions, batch_g1_additions_multi, msm_rows_mixed_bn254, SmallRow,
-    DEFAULT_MAX_ROW_CAPACITY,
+    batch_g1_additions, batch_g1_additions_multi, msm_rows_mixed_bn254,
+    msm_rows_mixed_bn254_projective, SmallRow, DEFAULT_MAX_ROW_CAPACITY,
 };
 
 pub use fq12_poly::{
