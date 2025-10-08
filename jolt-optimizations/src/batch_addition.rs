@@ -51,6 +51,11 @@ impl<const K: usize> SmallRow<K> {
     pub fn iter(&self) -> impl Iterator<Item = &u32> {
         self.indices.iter().take(self.len as usize)
     }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u32] {
+        &self.indices[..self.len as usize]
+    }
 }
 
 impl<const K: usize> Default for SmallRow<K> {
@@ -263,6 +268,68 @@ pub fn msm_rows_mixed_bn254<const K: usize>(
     G1Projective::normalize_batch(&proj)
 }
 
+/// Computes row-wise binary MSM returning projective points (no batch normalization).
+///
+/// # Arguments
+/// * `key` - Fixed G1Affine key of length n (column basis points)
+/// * `rows` - Slice of SmallRow; each entry holds indices into `key`
+/// * `k_hint` - Runtime hint for max row size (used to tune ILP)
+///
+/// # Returns
+/// Vector of G1Projective of length n (row sums in projective form)
+pub fn msm_rows_mixed_bn254_projective<const K: usize>(
+    key: &[G1Affine],
+    rows: &[SmallRow<K>],
+    k_hint: usize,
+) -> Vec<G1Projective> {
+    #[inline]
+    fn ilp_from_k(k: usize) -> usize {
+        match k {
+            0..=64 => 2,
+            65..=256 => 4,
+            257..=1024 => 6,
+            _ => 8,
+        }
+    }
+
+    let ilp = ilp_from_k(k_hint);
+
+    rows.par_iter()
+        .map(|row| {
+            let mut acc = G1Projective::default();
+            let indices = row.as_slice();
+            for chunk in indices.chunks(ilp) {
+                if let Some(&j0) = chunk.get(0) {
+                    acc += key[j0 as usize];
+                }
+                if let Some(&j1) = chunk.get(1) {
+                    acc += key[j1 as usize];
+                }
+                if let Some(&j2) = chunk.get(2) {
+                    acc += key[j2 as usize];
+                }
+                if let Some(&j3) = chunk.get(3) {
+                    acc += key[j3 as usize];
+                }
+                if let Some(&j4) = chunk.get(4) {
+                    acc += key[j4 as usize];
+                }
+                if let Some(&j5) = chunk.get(5) {
+                    acc += key[j5 as usize];
+                }
+                if let Some(&j6) = chunk.get(6) {
+                    acc += key[j6 as usize];
+                }
+                if let Some(&j7) = chunk.get(7) {
+                    acc += key[j7 as usize];
+                }
+            }
+
+            acc
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,6 +477,42 @@ mod tests {
             assert_eq!(
                 result[row_idx], expected,
                 "Stress test failed at row {}",
+                row_idx
+            );
+        }
+    }
+
+    #[test]
+    fn test_msm_rows_projective_correctness() {
+        let mut rng = ark_std::test_rng();
+
+        let n = 100;
+        let k = 50;
+
+        let key: Vec<G1Affine> = (0..n).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let rows: Vec<SmallRow> = (0..n)
+            .map(|_| {
+                let num_indices = (rng.next_u64() as usize) % k + 1;
+                let indices: Vec<u32> = (0..num_indices)
+                    .map(|_| (rng.next_u64() as u32) % (n as u32))
+                    .collect();
+                SmallRow::from_indices(&indices)
+            })
+            .collect();
+
+        let proj_result = msm_rows_mixed_bn254_projective(&key, &rows, k);
+
+        let result = G1Projective::normalize_batch(&proj_result);
+
+        for (row_idx, row) in rows.iter().enumerate() {
+            let mut expected = G1Affine::zero();
+            for &idx in row.iter() {
+                expected = (expected + key[idx as usize]).into_affine();
+            }
+            assert_eq!(
+                result[row_idx], expected,
+                "Projective MSM mismatch at row {}",
                 row_idx
             );
         }
