@@ -1,11 +1,8 @@
 //! Runtime-sized sparse row representation
-//!
-//! Provides efficient sparse row storage using u16 or u32 indices based on matrix size.
 
 /// Runtime-sized sparse row for binary MSM
 ///
 /// Uses u16 indices when n ≤ 65536, otherwise u32.
-/// No const generics - memory is allocated based on actual row size.
 #[derive(Clone, Debug)]
 pub struct SmallRow {
     idx_u16: Option<Box<[u16]>>,
@@ -13,7 +10,6 @@ pub struct SmallRow {
 }
 
 impl SmallRow {
-    /// Creates a row from u16 indices (for n ≤ 65536)
     #[inline]
     pub fn from_u16(mut v: Vec<u16>) -> Self {
         v.shrink_to_fit();
@@ -23,7 +19,6 @@ impl SmallRow {
         }
     }
 
-    /// Creates a row from u32 indices (for n > 65536)
     #[inline]
     pub fn from_u32(mut v: Vec<u32>) -> Self {
         v.shrink_to_fit();
@@ -33,25 +28,21 @@ impl SmallRow {
         }
     }
 
-    /// Returns u16 slice directly (for n ≤ 65536)
     #[inline(always)]
     pub fn as_u16_slice(&self) -> &[u16] {
         self.idx_u16.as_deref().expect("expected u16 storage")
     }
 
-    /// Returns u32 slice directly (for n > 65536)
     #[inline(always)]
     pub fn as_u32_slice(&self) -> &[u32] {
         self.idx_u32.as_deref().expect("expected u32 storage")
     }
 
-    /// Returns true if using u16 storage
     #[inline(always)]
     pub fn is_u16(&self) -> bool {
         self.idx_u16.is_some()
     }
 
-    /// Returns an iterator over indices as usize
     #[inline]
     pub fn iter_usize(&self) -> impl ExactSizeIterator<Item = usize> + '_ {
         if let Some(s) = &self.idx_u16 {
@@ -61,7 +52,6 @@ impl SmallRow {
         SmallRowIter::U32(s.iter())
     }
 
-    /// Returns the number of indices in the row
     #[inline]
     pub fn len(&self) -> usize {
         if let Some(s) = &self.idx_u16 {
@@ -70,14 +60,12 @@ impl SmallRow {
         self.idx_u32.as_ref().expect("row not initialized").len()
     }
 
-    /// Returns true if the row is empty
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
-/// Iterator for SmallRow indices
 pub enum SmallRowIter<'a> {
     U16(core::slice::Iter<'a, u16>),
     U32(core::slice::Iter<'a, u32>),

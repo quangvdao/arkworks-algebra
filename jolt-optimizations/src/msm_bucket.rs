@@ -1,7 +1,4 @@
-//! Optimized row-wise MSM using Bucket (XYZZ coordinates)
-//!
-//! Uses arkworks' Bucket type which implements XYZZ coordinates (X, Y, ZZ=Z², ZZZ=Z³)
-//! for faster mixed addition by caching Z² and Z³.
+//! Row-wise binary MSM using Bucket (XYZZ coordinates)
 
 use ark_bn254::g1::Config as G1Config;
 use ark_bn254::{G1Affine, G1Projective};
@@ -11,9 +8,6 @@ use rayon::prelude::*;
 use crate::small_row::SmallRow;
 
 /// Computes row-wise binary MSM using Bucket (XYZZ) coordinates, returning projective points.
-///
-/// This function uses XYZZ coordinates which cache ZZ=Z² and ZZZ=Z³, saving ~2 squarings
-/// per mixed addition compared to standard Jacobian coordinates.
 ///
 /// # Arguments
 /// * `key` - Fixed G1Affine key of length n (column basis points)
@@ -27,7 +21,6 @@ pub fn msm_rows_bucket_projective(
     rows: &[SmallRow],
     k_hint: usize,
 ) -> Vec<G1Projective> {
-    /// Determines interleave factor based on runtime k for optimal ILP
     #[inline(always)]
     fn ilp_from_k(k: usize) -> usize {
         match k {
@@ -44,24 +37,35 @@ pub fn msm_rows_bucket_projective(
         .map(|row| {
             let mut acc = Bucket::<G1Config>::ZERO;
 
-            // Branch once per row on u16 vs u32 storage
             if row.is_u16() {
                 let s = row.as_u16_slice();
                 let mut chunks = s.chunks_exact(ilp);
 
-                // ILP-unrolled hot loop - no per-row allocation
                 for ch in &mut chunks {
                     acc += key[ch[0] as usize];
-                    if ilp > 1 { acc += key[ch[1] as usize]; }
-                    if ilp > 2 { acc += key[ch[2] as usize]; }
-                    if ilp > 3 { acc += key[ch[3] as usize]; }
-                    if ilp > 4 { acc += key[ch[4] as usize]; }
-                    if ilp > 5 { acc += key[ch[5] as usize]; }
-                    if ilp > 6 { acc += key[ch[6] as usize]; }
-                    if ilp > 7 { acc += key[ch[7] as usize]; }
+                    if ilp > 1 {
+                        acc += key[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += key[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += key[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += key[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += key[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += key[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += key[ch[7] as usize];
+                    }
                 }
 
-                // Handle remainder
                 for &j in chunks.remainder() {
                     acc += key[j as usize];
                 }
@@ -69,19 +73,31 @@ pub fn msm_rows_bucket_projective(
                 let s = row.as_u32_slice();
                 let mut chunks = s.chunks_exact(ilp);
 
-                // ILP-unrolled hot loop - no per-row allocation
                 for ch in &mut chunks {
                     acc += key[ch[0] as usize];
-                    if ilp > 1 { acc += key[ch[1] as usize]; }
-                    if ilp > 2 { acc += key[ch[2] as usize]; }
-                    if ilp > 3 { acc += key[ch[3] as usize]; }
-                    if ilp > 4 { acc += key[ch[4] as usize]; }
-                    if ilp > 5 { acc += key[ch[5] as usize]; }
-                    if ilp > 6 { acc += key[ch[6] as usize]; }
-                    if ilp > 7 { acc += key[ch[7] as usize]; }
+                    if ilp > 1 {
+                        acc += key[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += key[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += key[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += key[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += key[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += key[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += key[ch[7] as usize];
+                    }
                 }
 
-                // Handle remainder
                 for &j in chunks.remainder() {
                     acc += key[j as usize];
                 }
@@ -93,9 +109,6 @@ pub fn msm_rows_bucket_projective(
 }
 
 /// Computes row-wise binary MSM using Bucket (XYZZ), returning affine points.
-///
-/// This is a convenience wrapper that performs batch normalization after computing
-/// the projective results.
 ///
 /// # Arguments
 /// * `key` - Fixed G1Affine key of length n (column basis points)
@@ -112,7 +125,6 @@ pub fn msm_rows_bucket_affine(key: &[G1Affine], rows: &[SmallRow], k_hint: usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ec::{AffineRepr, CurveGroup};
     use ark_std::{rand::RngCore, UniformRand};
 
     #[test]
@@ -137,9 +149,9 @@ mod tests {
         let result = msm_rows_bucket_affine(&key, &rows, k);
 
         for (row_idx, row) in rows.iter().enumerate() {
-            let mut expected = G1Affine::zero();
+            let mut expected = G1Affine::identity();
             for idx in row.iter_usize() {
-                expected = (expected + key[idx]).into_affine();
+                expected = (expected + key[idx]).into();
             }
             assert_eq!(
                 result[row_idx], expected,
@@ -172,9 +184,9 @@ mod tests {
         let result = G1Projective::normalize_batch(&proj);
 
         for (row_idx, row) in rows.iter().enumerate() {
-            let mut expected = G1Affine::zero();
+            let mut expected = G1Affine::identity();
             for idx in row.iter_usize() {
-                expected = (expected + key[idx]).into_affine();
+                expected = (expected + key[idx]).into();
             }
             assert_eq!(
                 result[row_idx], expected,
