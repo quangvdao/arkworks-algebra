@@ -55,7 +55,10 @@ pub use dory_g2::{
     vector_add_scalar_mul_g2_windowed2_signed, vector_scalar_mul_add_gamma_g2_online,
 };
 
-pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
+pub use batch_addition::{
+    batch_g1_additions, batch_g1_additions_multi, msm_rows_mixed_bn254, SmallRow,
+    DEFAULT_MAX_ROW_CAPACITY,
+};
 
 pub use fq12_poly::{
     eq_weights, eval_multilinear, fq12_to_multilinear_evals, fq12_to_poly12_coeffs, g_coeffs,

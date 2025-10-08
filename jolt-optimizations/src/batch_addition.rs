@@ -2,10 +2,62 @@
 //!
 //! Implements efficient batch addition of affine elliptic curve points
 //! using Montgomery's batch inversion trick to minimize field inversions.
-//! @TODO(markosg04) duplicate group elements?
-use ark_bn254::G1Affine;
-use ark_ec::AffineRepr;
+//!
+//! Also provides high-performance row-wise binary MSM using projective
+//! accumulator with mixed addition and batched normalization.
+use ark_bn254::{G1Affine, G1Projective};
+use ark_ec::{AffineRepr, CurveGroup};
+use arrayvec::ArrayVec;
 use rayon::prelude::*;
+
+/// Default maximum capacity for sparse rows
+pub const DEFAULT_MAX_ROW_CAPACITY: usize = 2048;
+
+/// Sparse row representation for binary MSM
+#[derive(Clone, Debug)]
+pub struct SmallRow<const K: usize = DEFAULT_MAX_ROW_CAPACITY> {
+    /// Number of non-zero entries in this row
+    pub len: u16,
+    /// Indices of non-zero entries (column positions)
+    pub indices: ArrayVec<u32, K>,
+}
+
+impl<const K: usize> SmallRow<K> {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            len: 0,
+            indices: ArrayVec::new(),
+        }
+    }
+    #[inline]
+    pub fn from_indices(indices: &[u32]) -> Self {
+        let mut row = Self::new();
+        for &idx in indices {
+            row.push(idx);
+        }
+        row
+    }
+
+    #[inline]
+    pub fn push(&mut self, idx: u32) {
+        if self.indices.len() < K {
+            self.indices.push(idx);
+            self.len = self.indices.len() as u16;
+        }
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = &u32> {
+        self.indices.iter().take(self.len as usize)
+    }
+}
+
+impl<const K: usize> Default for SmallRow<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Performs batch addition of G1 affine points.
 ///
@@ -39,7 +91,6 @@ pub fn batch_g1_additions(bases: &[G1Affine], indices: &[usize]) -> G1Affine {
         let pairs_count = current_len / 2;
         let has_odd = current_len % 2 == 1;
 
-        // Collect denominators in parallel
         let denominators: Vec<_> = (0..pairs_count)
             .into_par_iter()
             .map(|i| {
@@ -53,7 +104,6 @@ pub fn batch_g1_additions(bases: &[G1Affine], indices: &[usize]) -> G1Affine {
         let mut inverses = denominators;
         ark_ff::fields::batch_inversion(&mut inverses);
 
-        // Apply all additions in parallel
         let mut new_points: Vec<G1Affine> = (0..pairs_count)
             .into_par_iter()
             .zip(inverses.par_iter())
@@ -167,6 +217,52 @@ pub fn batch_g1_additions_multi(bases: &[G1Affine], indices_sets: &[Vec<usize>])
     working_sets.into_iter().map(|set| set[0]).collect()
 }
 
+/// Computes row-wise binary MSM on an n×n sparse binary matrix with ≤k ones per row.
+///
+/// # Arguments
+/// * `key` - Fixed G1Affine key of length n (column basis points)
+/// * `rows` - Slice of length n; each entry holds up to k sorted unique indices into `key`
+///
+/// # Returns
+/// Vector of G1Affine of length n (row sums)
+///
+/// # Algorithm
+/// 1. Parallel accumulation in projective coordinates (no inversions in hot loop)
+/// 2. Each row accumulates using mixed addition: `projective += affine`
+/// 3. Single batched normalization at end (amortizes inversion cost)
+pub fn msm_rows_mixed_bn254<const K: usize>(
+    key: &[G1Affine],
+    rows: &[SmallRow<K>],
+) -> Vec<G1Affine> {
+    assert_eq!(
+        key.len(),
+        rows.len(),
+        "Key length must equal number of rows"
+    );
+    let n = rows.len();
+
+    if n == 0 {
+        return Vec::new();
+    }
+
+    let proj: Vec<G1Projective> = rows
+        .par_iter()
+        .map(|row| {
+            let mut acc = G1Projective::default();
+
+            for &idx in row.iter() {
+                let idx = idx as usize;
+                if idx < key.len() {
+                    acc += key[idx];
+                }
+            }
+
+            acc
+        })
+        .collect();
+    G1Projective::normalize_batch(&proj)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +328,91 @@ mod tests {
             batch_result, expected,
             "Stress test failed: batch result doesn't match expected sum"
         );
+    }
+
+    #[test]
+    fn test_msm_rows_mixed_correctness() {
+        let mut rng = ark_std::test_rng();
+
+        let n = 100;
+        let k = 50;
+
+        let key: Vec<G1Affine> = (0..n).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let rows: Vec<SmallRow> = (0..n)
+            .map(|_| {
+                let num_indices = (rng.next_u64() as usize) % k + 1;
+                let indices: Vec<u32> = (0..num_indices)
+                    .map(|_| (rng.next_u64() as u32) % (n as u32))
+                    .collect();
+                SmallRow::from_indices(&indices)
+            })
+            .collect();
+
+        let result = msm_rows_mixed_bn254(&key, &rows);
+
+        for (row_idx, row) in rows.iter().enumerate() {
+            let mut expected = G1Affine::zero();
+            for &idx in row.iter() {
+                expected = (expected + key[idx as usize]).into_affine();
+            }
+            assert_eq!(result[row_idx], expected, "Mismatch at row {}", row_idx);
+        }
+    }
+
+    #[test]
+    fn test_msm_rows_empty() {
+        let key: Vec<G1Affine> = vec![];
+        let rows: Vec<SmallRow> = vec![];
+
+        let result = msm_rows_mixed_bn254(&key, &rows);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_msm_rows_single_element() {
+        let mut rng = ark_std::test_rng();
+        let key: Vec<G1Affine> = vec![G1Affine::rand(&mut rng)];
+        let mut row: SmallRow<DEFAULT_MAX_ROW_CAPACITY> = SmallRow::new();
+        row.push(0);
+        let rows = vec![row];
+
+        let result = msm_rows_mixed_bn254(&key, &rows);
+        assert_eq!(result[0], key[0]);
+    }
+
+    #[test]
+    fn test_msm_rows_stress_test() {
+        let mut rng = ark_std::test_rng();
+
+        let n = 1000;
+        let k = 500;
+
+        let key: Vec<G1Affine> = (0..n).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let rows: Vec<SmallRow> = (0..n)
+            .map(|_| {
+                let num_indices = (rng.next_u64() as usize) % k + 1;
+                let indices: Vec<u32> = (0..num_indices)
+                    .map(|_| (rng.next_u64() as u32) % (n as u32))
+                    .collect();
+                SmallRow::from_indices(&indices)
+            })
+            .collect();
+
+        let result = msm_rows_mixed_bn254(&key, &rows);
+
+        for row_idx in [0, n / 4, n / 2, 3 * n / 4, n - 1] {
+            let mut expected = G1Affine::zero();
+            for &idx in rows[row_idx].iter() {
+                expected = (expected + key[idx as usize]).into_affine();
+            }
+            assert_eq!(
+                result[row_idx], expected,
+                "Stress test failed at row {}",
+                row_idx
+            );
+        }
     }
 
     #[test]
