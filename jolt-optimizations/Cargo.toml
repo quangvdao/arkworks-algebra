@@ -18,6 +18,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-serialize.workspace = true
 ark-std.workspace = true
+arrayvec.workspace = true
 num-bigint.workspace = true
 num-rational.workspace = true
 num-integer.workspace = true
