@@ -59,9 +59,7 @@ pub use dory_g2::{
 
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
 
-pub use msm_bucket::{
-    msm_rows_bucket_affine, msm_rows_bucket_projective, msm_rows_sparse_streaming,
-};
+pub use msm_bucket::{batch_addition_matrix, msm_rows_bucket_affine, msm_rows_bucket_projective};
 pub use small_row::SmallRow;
 
 pub use fq12_poly::{

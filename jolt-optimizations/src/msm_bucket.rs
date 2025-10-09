@@ -124,21 +124,9 @@ pub fn msm_rows_bucket_affine(key: &[G1Affine], rows: &[SmallRow], k_hint: usize
 
 /// Computes row-wise binary MSM from sparse one-hot indices, returning projective points.
 ///
-/// This streaming version processes sparse indices directly without allocating intermediate
-/// SmallRow buffers, making it ideal for large sparse matrices where the upfront allocation
-/// cost is prohibitive.
-///
-/// # Arguments
-/// * `bases` - Fixed G1Affine bases (column basis points)
-/// * `nonzero_indices` - Sparse representation where each `Some(kopt)` at position `i` in a chunk
-///                       maps to index `i * k + kopt` in bases
-/// * `cycles_per_row` - Number of elements per row chunk
-/// * `k` - Multiplier for index transformation and ILP tuning hint
-/// * `row_len` - Total row length (determines u16 vs u32 usage)
-///
 /// # Returns
 /// Vector of G1Projective (row sums in projective form)
-pub fn msm_rows_sparse_streaming(
+pub fn batch_addition_matrix(
     bases: &[G1Affine],
     nonzero_indices: &[Option<usize>],
     cycles_per_row: usize,
@@ -335,8 +323,7 @@ mod tests {
             })
             .collect();
 
-        let result =
-            msm_rows_sparse_streaming(&bases, &nonzero_indices, cycles_per_row, k, row_len);
+        let result = batch_addition_matrix(&bases, &nonzero_indices, cycles_per_row, k, row_len);
 
         for (row_idx, chunk) in nonzero_indices.chunks(cycles_per_row).enumerate() {
             let mut expected = G1Affine::identity();
@@ -377,7 +364,7 @@ mod tests {
             .collect();
 
         let sparse_result =
-            msm_rows_sparse_streaming(&bases, &nonzero_indices, cycles_per_row, k, row_len);
+            batch_addition_matrix(&bases, &nonzero_indices, cycles_per_row, k, row_len);
 
         let rows: Vec<SmallRow> = nonzero_indices
             .chunks(cycles_per_row)
