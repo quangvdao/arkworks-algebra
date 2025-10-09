@@ -61,6 +61,11 @@ bn254 = [ "bn254_scalar_field", "bn254_base_field" ]
 secp256k1 = []
 
 [[bench]]
+name = "compressed_pairing"
+path = "benches/compressed_pairing.rs"
+harness = false
+
+[[bench]]
 name = "bls12_381"
 path = "benches/bls12_381.rs"
 harness = false

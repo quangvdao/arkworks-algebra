@@ -17,6 +17,7 @@ static Q: [u64; 8] = [
 ];
 
 // https://eprint.iacr.org/2007/429.pdf Proposition 1
+#[derive(Clone, Copy)]
 pub struct CompressedFq12(pub (Fq2, Fq2));
 
 impl CompressedFq12 {
