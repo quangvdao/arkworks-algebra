@@ -36,9 +36,10 @@ pub use fq12::*;
 
 use ark_ec::{
     bn::{
-        self, raise_to_psi_six_pow, raise_to_sixth_cyclotomic_polynomial, Bn, BnConfig, TwistType,
+        self, pow_sixth_cyclotomic_polynomial_over_r, raise_to_psi_six_pow, Bn, BnConfig,
+        G1Prepared, G2Prepared, TwistType,
     },
-    pairing::{MillerLoopOutput, PairingOutput},
+    pairing::{MillerLoopOutput, Pairing, PairingOutput},
 };
 use ark_ff::MontFp;
 
@@ -134,3 +135,19 @@ pub type G1Affine = bn::G1Affine<Config>;
 pub type G1Projective = bn::G1Projective<Config>;
 pub type G2Affine = bn::G2Affine<Config>;
 pub type G2Projective = bn::G2Projective<Config>;
+
+pub fn fq12_compressed_pairing(
+    a: impl Into<G1Prepared<Config>>,
+    b: impl Into<G2Prepared<Config>>,
+) -> CompressedFq12 {
+    fq12_compressed_multi_pairing([a], [b])
+}
+
+pub fn fq12_compressed_multi_pairing(
+    a: impl IntoIterator<Item = impl Into<G1Prepared<Config>>>,
+    b: impl IntoIterator<Item = impl Into<G2Prepared<Config>>>,
+) -> CompressedFq12 {
+    let miller_loop_output = Bn254::multi_miller_loop(a, b);
+    let pow = pow_sixth_cyclotomic_polynomial_over_r::<Config>(miller_loop_output.0);
+    torus_compress_psi_6_pow_to_two_fq2(fq12_to_compressible_fq12(pow))
+}
