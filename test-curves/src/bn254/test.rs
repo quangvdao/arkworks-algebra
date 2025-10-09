@@ -55,12 +55,14 @@ mod test {
         bn::{raise_to_psi_six_pow, raise_to_sixth_cyclotomic_polynomial, G1Prepared, G2Prepared},
         pairing::Pairing,
     };
-    use ark_ff::{AdditiveGroup, Field, Fp12Config, Fp6Config, MontFp, UniformRand};
+    use ark_ff::{
+        AdditiveGroup, CyclotomicMultSubgroup, Field, Fp12Config, Fp6Config, MontFp, UniformRand,
+    };
     use ark_std::test_rng;
 
     use crate::bn254::{
         compressible_fq12_to_fq12, fq12_to_compressible_fq12, torus_compress_fq6,
-        torus_compress_psi_6_pow, torus_decompress_fq6, Bn254, CompressibleBn254,
+        torus_compress_psi_6_pow_to_two_fq2, torus_decompress_fq6, Bn254, CompressibleBn254,
         CompressibleConfig, CompressibleFq12, Config, Fq12, Fq12Config, Fq2, Fq6, Fq6Config,
         G1Projective, G2Projective,
     };
@@ -147,7 +149,7 @@ mod test {
         // Test compression of an CompressibleFq12 element e2e.
         for _ in 0..num_trials {
             let compressible_fq12 = CompressibleFq12::rand(&mut rng);
-            let compressed_fq12 = torus_compress_psi_6_pow(compressible_fq12);
+            let compressed_fq12 = torus_compress_psi_6_pow_to_two_fq2(compressible_fq12);
             let decompressed_fq12 = compressed_fq12.decompress();
             assert_eq!(compressible_fq12.pow(PSI_6), decompressed_fq12);
         }
@@ -216,7 +218,7 @@ mod test {
         for _ in 0..num_trials {
             let a = Fq12::rand(&mut rng);
             let a_prime = fq12_to_compressible_fq12(a);
-            let compressed = torus_compress_psi_6_pow(a_prime);
+            let compressed = torus_compress_psi_6_pow_to_two_fq2(a_prime);
 
             let decompressed = compressed.decompress();
             let decompressed_fq12 = compressible_fq12_to_fq12(decompressed);
@@ -259,16 +261,17 @@ mod test {
 
     #[test]
     fn test_compressible_pairing() {
-        let num_trials = 10;
+        let num_trials = 100;
         let mut rng = test_rng();
         for _ in 0..num_trials {
             let g1 = G1Projective::rand(&mut rng);
             let g2 = G2Projective::rand(&mut rng);
             let g1_prepared: G1Prepared<Config> = g1.clone().into();
             let g2_prepared: G2Prepared<Config> = g2.clone().into();
-            let pairing = Bn254::multi_miller_loop([g1_prepared], [g2_prepared]);
             // let fq12 = Fq12::rand(&mut rng);
-            let fq12 = CompressibleBn254::multi_miller_loop([g1], [g2]).0;
+            let fq12 = Bn254::multi_miller_loop([g1], [g2]).0;
+            // let fq12 = Bn254::pairing(g1, g2).0;
+            let pairing_value = Bn254::pairing(g1, g2).0;
             // let fq12 = Bn254::pairing(g1, g2).0;
 
             // let compressed_pow = torus_compress_psi_6_pow(fq12);
@@ -277,23 +280,39 @@ mod test {
             // assert_eq!(psi_6_pow, fq12.pow(PSI_6));
             // assert_eq!(decompressed_pow, psi_6_pow);
 
-            // let pow = raise_to_sixth_cyclotomic_polynomial::<Config>(fq12);
-            let pow = fq12.pow(D_PRIME);
-            let pow = raise_to_psi_six_pow::<CompressibleConfig>(pow).unwrap();
+            let pow = raise_to_sixth_cyclotomic_polynomial::<Config>(fq12);
+            // assert_eq!(pow, fq12.pow(D_PRIME));
+            let compressed_pow: crate::bn254::CompressedFq2 =
+                torus_compress_psi_6_pow_to_two_fq2(fq12_to_compressible_fq12(pow));
+            let pow = raise_to_psi_six_pow::<Config>(pow).unwrap();
 
-            let other = raise_to_psi_six_pow::<CompressibleConfig>(fq12).unwrap();
+            // assert_eq!(pow, fq12.pow(PSI_6));
+
+            // let fq12 = Bn254::multi_miller_loop([g1], [g2]).0;
+            // // let fq12 = Bn254::pairing(g1, g2).0;
+
+            // assert_eq!(fq12.cyclotomic_inverse(), fq12.inverse());
+            // assert_eq!(fq12.cyclotomic_exp(PSI_6), fq12.pow(PSI_6));
+
+            let bench = raise_to_psi_six_pow::<Config>(fq12).unwrap();
+            assert_eq!(bench, fq12.pow(PSI_6));
             // assert_eq!(
             //     other.pow(D_PRIME),
             //     raise_to_sixth_cyclotomic_polynomial::<CompressibleConfig>(other)
             // );
-            // let other = raise_to_sixth_cyclotomic_polynomial::<Config>(other);
-            let other = other.pow(D_PRIME);
-            assert_eq!(pow, other, "fq12: {:?}", fq12);
+            let final_bench = raise_to_sixth_cyclotomic_polynomial::<Config>(bench);
+            assert_eq!(final_bench, bench.pow(D_PRIME));
+            // assert_eq!(pairing_value, final_bench);
+            assert_eq!(pow, pairing_value);
+            assert_eq!(compressible_fq12_to_fq12(compressed_pow.decompress()), pow);
+
+            // let other = other.pow(D_PRIME);
+            // assert_eq!(pow, other, "fq12: {:?}", fq12);
 
             // let res = raise_to_sixth_cyclotomic_polynomial::<CompressibleConfig>(fq12);
-            let res = fq12.pow(D_PRIME);
-            let compressed_pow = torus_compress_psi_6_pow(res);
-            assert_eq!(compressed_pow.decompress(), pow);
+            // let res = fq12.pow(D_PRIME);
+            // let compressed_pow = torus_compress_psi_6_pow(res);
+            // assert_eq!(compressed_pow.decompress(), pow);
 
             // let g1 = G1Projective::rand(&mut rng);
             // let g2 = G2Projective::rand(&mut rng);
