@@ -122,6 +122,124 @@ pub fn msm_rows_bucket_affine(key: &[G1Affine], rows: &[SmallRow], k_hint: usize
     G1Projective::normalize_batch(&proj)
 }
 
+/// Computes row-wise binary MSM from sparse one-hot indices, returning projective points.
+///
+/// This streaming version processes sparse indices directly without allocating intermediate
+/// SmallRow buffers, making it ideal for large sparse matrices where the upfront allocation
+/// cost is prohibitive.
+///
+/// # Arguments
+/// * `bases` - Fixed G1Affine bases (column basis points)
+/// * `nonzero_indices` - Sparse representation where each `Some(kopt)` at position `i` in a chunk
+///                       maps to index `i * k + kopt` in bases
+/// * `cycles_per_row` - Number of elements per row chunk
+/// * `k` - Multiplier for index transformation and ILP tuning hint
+/// * `row_len` - Total row length (determines u16 vs u32 usage)
+///
+/// # Returns
+/// Vector of G1Projective (row sums in projective form)
+pub fn msm_rows_sparse_streaming(
+    bases: &[G1Affine],
+    nonzero_indices: &[Option<usize>],
+    cycles_per_row: usize,
+    k: usize,
+    row_len: usize,
+) -> Vec<G1Projective> {
+    #[inline(always)]
+    fn ilp_from_k(k: usize) -> usize {
+        match k {
+            0..=64 => 2,
+            65..=256 => 4,
+            257..=1024 => 6,
+            _ => 8,
+        }
+    }
+
+    let ilp = ilp_from_k(k);
+    let use_u16 = row_len <= 65_536;
+
+    nonzero_indices
+        .par_chunks(cycles_per_row)
+        .map(|chunk| {
+            let mut acc = Bucket::<G1Config>::ZERO;
+
+            if use_u16 {
+                let indices: Vec<u16> = chunk
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt) as u16))
+                    .collect();
+
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
+                }
+            } else {
+                let indices: Vec<u32> = chunk
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt) as u32))
+                    .collect();
+
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
+                }
+            }
+
+            acc.into()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +310,95 @@ mod tests {
                 result[row_idx], expected,
                 "Bucket projective MSM mismatch at row {}",
                 row_idx
+            );
+        }
+    }
+
+    #[test]
+    fn test_msm_sparse_streaming() {
+        let mut rng = ark_std::test_rng();
+
+        let k = 8;
+        let cycles_per_row = 100;
+        let num_rows = 50;
+        let row_len = k * cycles_per_row;
+
+        let bases: Vec<G1Affine> = (0..row_len).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let nonzero_indices: Vec<Option<usize>> = (0..num_rows * cycles_per_row)
+            .map(|_| {
+                if rng.next_u64() % 2 == 0 {
+                    Some((rng.next_u64() as usize) % k)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let result =
+            msm_rows_sparse_streaming(&bases, &nonzero_indices, cycles_per_row, k, row_len);
+
+        for (row_idx, chunk) in nonzero_indices.chunks(cycles_per_row).enumerate() {
+            let mut expected = G1Affine::identity();
+            for (i, &opt) in chunk.iter().enumerate() {
+                if let Some(kopt) = opt {
+                    let idx = i * k + kopt;
+                    expected = (expected + bases[idx]).into();
+                }
+            }
+            assert_eq!(
+                result[row_idx].into_affine(),
+                expected,
+                "Sparse streaming MSM mismatch at row {}",
+                row_idx
+            );
+        }
+    }
+
+    #[test]
+    fn test_msm_sparse_streaming_vs_bucket() {
+        let mut rng = ark_std::test_rng();
+
+        let k = 16;
+        let cycles_per_row = 200;
+        let num_rows = 30;
+        let row_len = k * cycles_per_row;
+
+        let bases: Vec<G1Affine> = (0..row_len).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let nonzero_indices: Vec<Option<usize>> = (0..num_rows * cycles_per_row)
+            .map(|_| {
+                if rng.next_u64() % 3 == 0 {
+                    Some((rng.next_u64() as usize) % k)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let sparse_result =
+            msm_rows_sparse_streaming(&bases, &nonzero_indices, cycles_per_row, k, row_len);
+
+        let rows: Vec<SmallRow> = nonzero_indices
+            .chunks(cycles_per_row)
+            .map(|chunk| {
+                let indices: Vec<u16> = chunk
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt) as u16))
+                    .collect();
+                SmallRow::from_u16(indices)
+            })
+            .collect();
+
+        let bucket_result = msm_rows_bucket_projective(&bases, &rows, k);
+
+        for (idx, (sparse, bucket)) in sparse_result.iter().zip(bucket_result.iter()).enumerate() {
+            assert_eq!(
+                sparse.into_affine(),
+                bucket.into_affine(),
+                "Sparse vs bucket mismatch at row {}",
+                idx
             );
         }
     }
