@@ -228,6 +228,115 @@ pub fn batch_addition_matrix(
         .collect()
 }
 
+/// Computes row-wise binary MSM from sparse one-hot u8 indices, returning projective points.
+///
+/// Memory-efficient variant for small k values (k < 256). Uses u8 for nonzero indices
+/// to reduce memory footprint.
+///
+/// # Returns
+/// Vector of G1Projective (row sums in projective form)
+pub fn batch_addition_matrix_u8(
+    bases: &[G1Affine],
+    nonzero_indices: &[Option<u8>],
+    cycles_per_row: usize,
+    k: usize,
+    row_len: usize,
+) -> Vec<G1Projective> {
+    #[inline(always)]
+    fn ilp_from_k(k: usize) -> usize {
+        match k {
+            0..=64 => 2,
+            65..=256 => 4,
+            257..=1024 => 6,
+            _ => 8,
+        }
+    }
+
+    let ilp = ilp_from_k(k);
+    let use_u16 = row_len <= 65_536;
+
+    nonzero_indices
+        .par_chunks(cycles_per_row)
+        .map(|chunk| {
+            let mut acc = Bucket::<G1Config>::ZERO;
+
+            if use_u16 {
+                let indices: Vec<u16> = chunk
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u16))
+                    .collect();
+
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
+                }
+            } else {
+                let indices: Vec<u32> = chunk
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u32))
+                    .collect();
+
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
+                    }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
+                    }
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
+                    }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
+                }
+            }
+
+            acc.into()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,6 +494,47 @@ mod tests {
                 sparse.into_affine(),
                 bucket.into_affine(),
                 "Sparse vs bucket mismatch at row {}",
+                idx
+            );
+        }
+    }
+
+    #[test]
+    fn test_batch_addition_matrix_u8() {
+        let mut rng = ark_std::test_rng();
+
+        let k = 16;
+        let cycles_per_row = 150;
+        let num_rows = 40;
+        let row_len = k * cycles_per_row;
+
+        let bases: Vec<G1Affine> = (0..row_len).map(|_| G1Affine::rand(&mut rng)).collect();
+
+        let nonzero_indices_u8: Vec<Option<u8>> = (0..num_rows * cycles_per_row)
+            .map(|_| {
+                if rng.next_u64() % 3 == 0 {
+                    Some((rng.next_u64() as u8) % (k as u8))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let nonzero_indices_usize: Vec<Option<usize>> = nonzero_indices_u8
+            .iter()
+            .map(|&opt| opt.map(|x| x as usize))
+            .collect();
+
+        let result_u8 =
+            batch_addition_matrix_u8(&bases, &nonzero_indices_u8, cycles_per_row, k, row_len);
+        let result_usize =
+            batch_addition_matrix(&bases, &nonzero_indices_usize, cycles_per_row, k, row_len);
+
+        for (idx, (r_u8, r_usize)) in result_u8.iter().zip(result_usize.iter()).enumerate() {
+            assert_eq!(
+                r_u8.into_affine(),
+                r_usize.into_affine(),
+                "u8 vs usize mismatch at row {}",
                 idx
             );
         }
