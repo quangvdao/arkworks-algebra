@@ -16,6 +16,42 @@ use ark_test_curves::bn254::{fq12_compressed_pairing, G1Projective, G2Projective
 use criterion::{black_box, BatchSize, Criterion};
 
 #[cfg(feature = "bn254")]
+fn pairing_bench(compressed: bool, len: usize) -> impl FnOnce(&mut Criterion) {
+    |c: &mut Criterion| {
+        let bench_name = format!(
+            "{}_pairing ({} pairs), ",
+            if compressed {
+                "compressed"
+            } else {
+                "uncompressed"
+            },
+            len
+        );
+
+        let mut rng = test_rng();
+        c.bench_function(&bench_name, |b| {
+            b.iter_batched(
+                || {
+                    let g1 = G1Projective::rand(&mut rng);
+                    let g2 = G2Projective::rand(&mut rng);
+                    (g1, g2)
+                },
+                |(g1, g2)| {
+                    black_box(|| {
+                        if compressed {
+                            fq12_compressed_pairing(g1, g2);
+                        } else {
+                            Bn254::pairing(g1, g2);
+                        }
+                    })
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+}
+
+#[cfg(feature = "bn254")]
 fn uncompressed_pairing_bench(c: &mut Criterion) {
     let mut rng = test_rng();
 
@@ -27,107 +63,6 @@ fn uncompressed_pairing_bench(c: &mut Criterion) {
                 (g1, g2)
             },
             |(g1, g2)| black_box(Bn254::pairing(g1, g2)),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-#[cfg(feature = "bn254")]
-fn uncompressed_multi_pairing_len_5_bench(c: &mut Criterion) {
-    let mut rng = test_rng();
-
-    c.bench_function("Bn254::multi_pairing (5 pairs)", |b| {
-        b.iter_batched(
-            || {
-                let g1 = (0..5)
-                    .map(|_| G1Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                let g2 = (0..5)
-                    .map(|_| G2Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                (g1, g2)
-            },
-            |(g1, g2)| black_box(Bn254::multi_pairing(g1, g2)),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-#[cfg(feature = "bn254")]
-fn uncompressed_multi_pairing_len_100_bench(c: &mut Criterion) {
-    let mut rng = test_rng();
-
-    c.bench_function("Bn254::multi_pairing (100 pairs)", |b| {
-        b.iter_batched(
-            || {
-                let g1 = (0..100)
-                    .map(|_| G1Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                let g2 = (0..100)
-                    .map(|_| G2Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                (g1, g2)
-            },
-            |(g1, g2)| black_box(Bn254::multi_pairing(g1, g2)),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-#[cfg(feature = "bn254")]
-fn compressed_pairing_bench(c: &mut Criterion) {
-    let mut rng = test_rng();
-
-    c.bench_function("fq12_compressed_pairing (1 pair)", |b| {
-        b.iter_batched(
-            || {
-                let g1 = G1Projective::rand(&mut rng);
-                let g2 = G2Projective::rand(&mut rng);
-                (g1, g2)
-            },
-            |(g1, g2)| black_box(fq12_compressed_pairing(g1, g2)),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-#[cfg(feature = "bn254")]
-fn compressed_multi_pairing_len_5_bench(c: &mut Criterion) {
-    let mut rng = test_rng();
-
-    c.bench_function("fq12_compressed_multi_pairing (5 pairs)", |b| {
-        b.iter_batched(
-            || {
-                let g1 = (0..5)
-                    .map(|_| G1Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                let g2 = (0..5)
-                    .map(|_| G2Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                (g1, g2)
-            },
-            |(g1, g2)| black_box(fq12_compressed_multi_pairing(g1, g2)),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-#[cfg(feature = "bn254")]
-fn compressed_multi_pairing_len_100_bench(c: &mut Criterion) {
-    let mut rng = test_rng();
-
-    c.bench_function("fq12_compressed_multi_pairing (100 pairs)", |b| {
-        b.iter_batched(
-            || {
-                let g1 = (0..100)
-                    .map(|_| G1Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                let g2 = (0..100)
-                    .map(|_| G2Projective::rand(&mut rng))
-                    .collect::<Vec<_>>();
-                (g1, g2)
-            },
-            |(g1, g2)| black_box(fq12_compressed_multi_pairing(g1, g2)),
             BatchSize::SmallInput,
         )
     });
@@ -147,15 +82,21 @@ fn decompression(c: &mut Criterion) {
 }
 
 #[cfg(feature = "bn254")]
+fn compressed_multi_pairing_len_100_bench(c: &mut Criterion) {
+    pairing_bench(true, 100)(c);
+}
+
+#[cfg(feature = "bn254")]
+fn uncompressed_multi_pairing_len_100_bench(c: &mut Criterion) {
+    pairing_bench(false, 100)(c);
+}
+
+#[cfg(feature = "bn254")]
 criterion::criterion_group!(
     benches,
-    // compressed_pairing_bench,
-    // uncompressed_pairing_bench,
-    // compressed_multi_pairing_len_5_bench,
-    // uncompressed_multi_pairing_len_5_bench,
     compressed_multi_pairing_len_100_bench,
     uncompressed_multi_pairing_len_100_bench,
-    // decompression
+    decompression
 );
 #[cfg(feature = "bn254")]
 criterion::criterion_main!(benches);
