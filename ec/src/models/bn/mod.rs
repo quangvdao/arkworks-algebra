@@ -19,13 +19,20 @@ use num_traits::One;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+// For debugging purposes.
+// const FACTOR1: [u64; 3] = [0x3a422f764fffffff, 0x8df6ed4bc8923d8a, 0x3bec47df15e307c8];
+// const FACTOR2: [u64; 3] = [0xb830738ad2b0eed6, 0x1ea96b02d9d9e38d, 0x3bec47df15e307c8];
+// const FACTOR3: [u64; 3] = [0x420398f3678302b8, 0x1ea96b02d9d9e38e, 0x3bec47df15e307c8];
+// const FACTOR4: [u64; 3] = [0xb830738ad2b0eed5, 0x1ea96b02d9d9e38d, 0x3bec47df15e307c8];
+
 pub enum TwistType {
     M,
     D,
 }
 
-pub fn raise_to_sixth_cyclotomic_polynomial<P: BnConfig>(
-    mut r: Fp12<P::Fp12Config>,
+/// Optimized version of raise_to_sixth_cyclotomic_polynomial where the input is already in a cyclotomic subgroup.
+fn pow_sixth_cyclotomic_polynomial_over_r_cyclotomic_optimized<P: BnConfig>(
+    mut f: Fp12<P::Fp12Config>,
 ) -> Fp12<P::Fp12Config> {
     // https://cacr.uwaterloo.ca/techreports/2011/cacr2011-26.pdf
     // Hard part follows Laura Fuentes-Castaneda et al. "Faster hashing to G2"
@@ -39,64 +46,73 @@ pub fn raise_to_sixth_cyclotomic_polynomial<P: BnConfig>(
     //
     // result = elt^( 2z * ( 6z^2 + 3z + 1 ) * (q^4 - q^2 + 1)/r ).
 
-    const FACTOR1: [u64; 3] = [0x3a422f764fffffff, 0x8df6ed4bc8923d8a, 0x3bec47df15e307c8];
-    const FACTOR2: [u64; 3] = [0xb830738ad2b0eed6, 0x1ea96b02d9d9e38d, 0x3bec47df15e307c8];
-    const FACTOR3: [u64; 3] = [0x420398f3678302b8, 0x1ea96b02d9d9e38e, 0x3bec47df15e307c8];
-    const FACTOR4: [u64; 3] = [0xb830738ad2b0eed5, 0x1ea96b02d9d9e38d, 0x3bec47df15e307c8];
+    let y0 = Bn::<P>::exp_by_neg_x(f);
+    // y1 = f^{-2x}
+    let y1 = y0.cyclotomic_square();
+    let y2 = y1.cyclotomic_square();
+    let mut y3 = y2 * &y1;
 
-    // let y0 = Bn::<P>::exp_by_neg_x(r);
-    // // y1 = f^{-2x}
-    // let y1 = y0.cyclotomic_square();
-    // let y2 = y1.cyclotomic_square();
-    // let mut y3 = y2 * &y1;
+    // y4 = f^{6x^2}
+    let y4 = Bn::<P>::exp_by_neg_x(y3);
+    let y5 = y4.cyclotomic_square();
+    let mut y6 = Bn::<P>::exp_by_neg_x(y5);
 
-    // // y4 = f^{6x^2}
-    // let y4 = Bn::<P>::exp_by_neg_x(y3);
-    // let y5 = y4.cyclotomic_square();
-    // let mut y6 = Bn::<P>::exp_by_neg_x(y5);
+    // y3 = f^{6x}
+    y3.cyclotomic_inverse_in_place();
 
-    // // y3 = f^{6x}
-    // y3.cyclotomic_inverse_in_place();
+    // y6 = f^{12x^3}
+    y6.cyclotomic_inverse_in_place();
 
-    // // y6 = f^{12x^3}
-    // y6.cyclotomic_inverse_in_place();
+    let y7 = y6 * &y4;
+    // y8 = a
+    let mut y8 = y7 * &y3;
 
-    // let y7 = y6 * &y4;
-    // // y8 = a
-    // let mut y8 = y7 * &y3;
+    // y9 = b = a * f^{-2x}
+    let y9 = y8 * &y1;
 
-    // // y9 = b = a * f^{-2x}
-    // let y9 = y8 * &y1;
+    let y10 = y8 * &y4;
+    // y11 is the first factor for the equation at the bottom of p.6
+    let y11 = y10 * &f;
 
-    // let y10 = y8 * &y4;
-    // // y11 is the first factor for the equation at the bottom of p.6
-    // let y11 = y10 * &r;
+    // y12 is b^{p}
+    let mut y12 = y9;
+    y12.frobenius_map_in_place(1);
 
-    // // y12 is b^{p}
-    // let mut y12 = y9;
-    // y12.frobenius_map_in_place(1);
+    // y13 is product of first two factors for the equation at the bottom of p.6
+    let y13 = y12 * &y11;
 
-    // // y13 is product of first two factors for the equation at the bottom of p.6
-    // let y13 = y12 * &y11;
+    // y8 = a^p^2
+    y8.frobenius_map_in_place(2);
 
-    // // y8 = a^p^2
-    // y8.frobenius_map_in_place(2);
+    // y14 is product of first three factors for the equation at the bottom of p.6
+    let y14 = y8 * &y13;
+    f.cyclotomic_inverse_in_place();
 
-    // // y14 is product of first three factors for the equation at the bottom of p.6
-    // let y14 = y8 * &y13;
-    // r.cyclotomic_inverse_in_place();
+    // y15 = b * f^{-1}
+    let mut y15 = f * &y9;
+    y15.frobenius_map_in_place(3);
+    let y16 = y15 * &y14;
 
-    // // y15 = b * f^{-1}
-    // let mut y15 = r * &y9;
-    // y15.frobenius_map_in_place(3);
-    // let y16 = y15 * &y14;
+    y16
+}
 
-    // y16
+pub fn pow_sixth_cyclotomic_polynomial_over_r<P: BnConfig>(
+    mut f: Fp12<P::Fp12Config>,
+) -> Fp12<P::Fp12Config> {
+    // https://cacr.uwaterloo.ca/techreports/2011/cacr2011-26.pdf
+    // Hard part follows Laura Fuentes-Castaneda et al. "Faster hashing to G2"
+    // by computing:
+    //
+    // result = elt^(q^3 * (12*z^3 + 6z^2 + 4z - 1) +
+    //               q^2 * (12*z^3 + 6z^2 + 6z) +
+    //               q   * (12*z^3 + 6z^2 + 4z) +
+    //               1   * (12*z^3 + 12z^2 + 6z + 1))
+    // which equals
+    //
+    // result = elt^( 2z * ( 6z^2 + 3z + 1 ) * (q^4 - q^2 + 1)/r ).
 
-    let f = r;
-    let mut r = r;
     // y0 = f^-x
-    let y0 = Bn::<P>::exp_by_neg_x_non_cyclotomic(r);
+    let y0 = Bn::<P>::exp_by_neg_x_non_cyclotomic(f);
     // y1 = f^{-2x}
     let y1 = y0.square();
     // y2 = f^{-4x}
@@ -127,28 +143,24 @@ pub fn raise_to_sixth_cyclotomic_polynomial<P: BnConfig>(
     let y10 = y8 * &y4;
 
     // y11 is the first factor for the equation at the bottom of p.6
-    let y11 = y10 * &r;
-    assert_eq!(y11, f.pow(FACTOR1));
+    let y11 = y10 * &f;
 
     // y12 is b^{p}
     let mut y12 = y9;
-    assert_eq!(y12, f.pow(FACTOR2));
     y12.frobenius_map_in_place(1);
 
     // y13 is product of first two factors for the equation at the bottom of p.6
     let y13 = y12 * &y11;
 
     // y8 = a^p^2
-    assert_eq!(y8, f.pow(FACTOR3));
     y8.frobenius_map_in_place(2);
 
     // y14 is product of first three factors for the equation at the bottom of p.6
     let y14 = y8 * &y13;
-    r.inverse_in_place();
+    f.inverse_in_place();
 
     // y15 = b * f^{-1}
-    let mut y15 = r * &y9;
-    assert_eq!(y15, f.pow(FACTOR4));
+    let mut y15 = f * &y9;
     y15.frobenius_map_in_place(3);
     let y16 = y15 * &y14;
 
@@ -263,93 +275,9 @@ pub trait BnConfig: 'static + Sized {
 
     #[allow(clippy::let_and_return)]
     fn final_exponentiation(f: MillerLoopOutput<Bn<Self>>) -> Option<PairingOutput<Bn<Self>>> {
-        // Beuchat et al p.9 equation 3.
-        // https://eprint.iacr.org/2010/354.pdf
-
-        // Easy part: result = elt^((q^6-1)*(q^2+1)).
-        // Follows, e.g., Beuchat et al page 9, by computing result as follows:
-        //   elt^((q^6-1)*(q^2+1)) = (conj(elt) * elt^(-1))^(q^2+1)
-        let f = f.0;
-
-        // f1 = r.cyclotomic_inverse_in_place() = f^(p^6)
-        let mut f1 = f;
-        f1.cyclotomic_inverse_in_place();
-
-        f.inverse().map(|mut f2| {
-            // f2 = f^(-1);
-            // r = f^(p^6 - 1)
-            let mut r = f1 * &f2;
-
-            // f2 = f^(p^6 - 1)
-            f2 = r;
-            // r = f^((p^6 - 1)(p^2))
-            r.frobenius_map_in_place(2);
-
-            // r = f^((p^6 - 1)(p^2) + (p^6 - 1))
-            // r = f^((p^6 - 1)(p^2 + 1))
-            r *= &f2;
-
-            // https://cacr.uwaterloo.ca/techreports/2011/cacr2011-26.pdf
-            // Hard part follows Laura Fuentes-Castaneda et al. "Faster hashing to G2"
-            // by computing:
-            //
-            // result = elt^(q^3 * (12*z^3 + 6z^2 + 4z - 1) +
-            //               q^2 * (12*z^3 + 6z^2 + 6z) +
-            //               q   * (12*z^3 + 6z^2 + 4z) +
-            //               1   * (12*z^3 + 12z^2 + 6z + 1))
-            // which equals
-            //
-            // result = elt^( 2z * ( 6z^2 + 3z + 1 ) * (q^4 - q^2 + 1)/r ).
-
-            let y0 = Bn::<Self>::exp_by_neg_x(r);
-            // y1 = f^{-2x}
-            let y1 = y0.cyclotomic_square();
-            let y2 = y1.cyclotomic_square();
-            let mut y3 = y2 * &y1;
-
-            // y4 = f^{6x^2}
-            let y4 = Bn::<Self>::exp_by_neg_x(y3);
-            let y5 = y4.cyclotomic_square();
-            let mut y6 = Bn::<Self>::exp_by_neg_x(y5);
-
-            // y3 = f^{6x}
-            y3.cyclotomic_inverse_in_place();
-
-            // y6 = f^{12x^3}
-            y6.cyclotomic_inverse_in_place();
-
-            let y7 = y6 * &y4;
-            // y8 = a
-            let mut y8 = y7 * &y3;
-
-            // y9 = b = a * f^{-2x}
-            let y9 = y8 * &y1;
-
-            let y10 = y8 * &y4;
-            // y11 is the first factor for the equation at the bottom of p.6
-            let y11 = y10 * &r;
-
-            // y12 is b^{p}
-            let mut y12 = y9;
-            y12.frobenius_map_in_place(1);
-
-            // y13 is product of first two factors for the equation at the bottom of p.6
-            let y13 = y12 * &y11;
-
-            // y8 = a^p^2
-            y8.frobenius_map_in_place(2);
-
-            // y14 is product of first three factors for the equation at the bottom of p.6
-            let y14 = y8 * &y13;
-            r.cyclotomic_inverse_in_place();
-
-            // y15 = b * f^{-1}
-            let mut y15 = r * &y9;
-            y15.frobenius_map_in_place(3);
-            let y16 = y15 * &y14;
-
-            PairingOutput(y16)
-        })
+        raise_to_psi_six_pow::<Self>(f.0)
+            .map(|y16| pow_sixth_cyclotomic_polynomial_over_r::<Self>(y16))
+            .map(PairingOutput)
     }
 }
 

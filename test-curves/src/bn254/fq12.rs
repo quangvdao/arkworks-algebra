@@ -17,9 +17,14 @@ static Q: [u64; 8] = [
 ];
 
 // https://eprint.iacr.org/2007/429.pdf Proposition 1
-pub struct CompressedFq2(pub (Fq2, Fq2));
+pub struct CompressedFq12(pub (Fq2, Fq2));
 
-impl CompressedFq2 {
+impl CompressedFq12 {
+    #[inline]
+    pub fn decompress_to_fq12(self) -> Fq12 {
+        compressible_fq12_to_fq12(self.decompress())
+    }
+
     #[inline]
     pub fn decompress(self) -> CompressibleFq12 {
         // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
@@ -36,12 +41,12 @@ impl CompressedFq2 {
 }
 
 #[inline]
-pub fn torus_compress_fq6(element: Fq6) -> CompressedFq2 {
-    CompressedFq2((element.c0, element.c1))
+pub fn torus_compress_fq6(element: Fq6) -> CompressedFq12 {
+    CompressedFq12((element.c0, element.c1))
 }
 
 #[inline]
-pub fn torus_decompress_fq6(element: CompressedFq2) -> Fq6 {
+pub fn torus_decompress_fq6(element: CompressedFq12) -> Fq6 {
     let c2 = (Fq2::from(3) * element.0 .0.square() + Fq6Config::NONRESIDUE)
         * (Fq2::from(3) * element.0 .1 * Fq6Config::NONRESIDUE)
             .inverse()
@@ -53,11 +58,11 @@ pub fn torus_decompress_fq6(element: CompressedFq2) -> Fq6 {
     }
 }
 
-pub fn torus_compress_psi_6_pow_to_two_fq2(element: CompressibleFq12) -> CompressedFq2 {
+pub fn torus_compress_psi_6_pow_to_two_fq2(element: CompressibleFq12) -> CompressedFq12 {
     let c1 = element.c0 / element.c1;
     let c1_pow = -c1.pow(Q);
     let compressed_prod = CompressibleFq12::mul_torus_compressed_elements(c1_pow, c1);
-    CompressedFq2((compressed_prod.c0, compressed_prod.c1))
+    CompressedFq12((compressed_prod.c0, compressed_prod.c1))
 }
 
 #[inline]
