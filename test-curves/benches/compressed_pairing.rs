@@ -54,6 +54,27 @@ fn uncompressed_multi_pairing_len_5_bench(c: &mut Criterion) {
 }
 
 #[cfg(feature = "bn254")]
+fn uncompressed_multi_pairing_len_100_bench(c: &mut Criterion) {
+    let mut rng = test_rng();
+
+    c.bench_function("Bn254::multi_pairing (100 pairs)", |b| {
+        b.iter_batched(
+            || {
+                let g1 = (0..100)
+                    .map(|_| G1Projective::rand(&mut rng))
+                    .collect::<Vec<_>>();
+                let g2 = (0..100)
+                    .map(|_| G2Projective::rand(&mut rng))
+                    .collect::<Vec<_>>();
+                (g1, g2)
+            },
+            |(g1, g2)| black_box(Bn254::multi_pairing(g1, g2)),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+#[cfg(feature = "bn254")]
 fn compressed_pairing_bench(c: &mut Criterion) {
     let mut rng = test_rng();
 
@@ -92,6 +113,27 @@ fn compressed_multi_pairing_len_5_bench(c: &mut Criterion) {
 }
 
 #[cfg(feature = "bn254")]
+fn compressed_multi_pairing_len_100_bench(c: &mut Criterion) {
+    let mut rng = test_rng();
+
+    c.bench_function("fq12_compressed_multi_pairing (100 pairs)", |b| {
+        b.iter_batched(
+            || {
+                let g1 = (0..100)
+                    .map(|_| G1Projective::rand(&mut rng))
+                    .collect::<Vec<_>>();
+                let g2 = (0..100)
+                    .map(|_| G2Projective::rand(&mut rng))
+                    .collect::<Vec<_>>();
+                (g1, g2)
+            },
+            |(g1, g2)| black_box(fq12_compressed_multi_pairing(g1, g2)),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+#[cfg(feature = "bn254")]
 fn decompression(c: &mut Criterion) {
     let mut rng = test_rng();
 
@@ -107,11 +149,13 @@ fn decompression(c: &mut Criterion) {
 #[cfg(feature = "bn254")]
 criterion::criterion_group!(
     benches,
-    compressed_pairing_bench,
-    uncompressed_pairing_bench,
-    compressed_multi_pairing_len_5_bench,
-    uncompressed_multi_pairing_len_5_bench,
-    decompression
+    // compressed_pairing_bench,
+    // uncompressed_pairing_bench,
+    // compressed_multi_pairing_len_5_bench,
+    // uncompressed_multi_pairing_len_5_bench,
+    compressed_multi_pairing_len_100_bench,
+    uncompressed_multi_pairing_len_100_bench,
+    // decompression
 );
 #[cfg(feature = "bn254")]
 criterion::criterion_main!(benches);
