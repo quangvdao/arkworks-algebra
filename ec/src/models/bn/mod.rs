@@ -276,7 +276,7 @@ pub trait BnConfig: 'static + Sized {
     #[allow(clippy::let_and_return)]
     fn final_exponentiation(f: MillerLoopOutput<Bn<Self>>) -> Option<PairingOutput<Bn<Self>>> {
         raise_to_psi_six_pow::<Self>(f.0)
-            .map(|y16| pow_sixth_cyclotomic_polynomial_over_r::<Self>(y16))
+            .map(pow_sixth_cyclotomic_polynomial_over_r_cyclotomic_optimized::<Self>)
             .map(PairingOutput)
     }
 }
