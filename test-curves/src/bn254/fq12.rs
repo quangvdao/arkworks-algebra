@@ -63,8 +63,7 @@ pub fn torus_decompress_fq6(element: CompressedFq2) -> Fq6 {
     }
 }
 
-// TODO: this function can be generalized for any cubic extension using Hilbert 90.
-pub fn torus_compress_psi_6_pow(element: CompressibleFq12) -> CompressedFq2 {
+pub fn torus_compress_psi_6_pow_to_two_fq2(element: CompressibleFq12) -> CompressedFq2 {
     let c1 = element.c0 / element.c1;
     let c1_pow = -c1.pow(Q);
     let compressed_prod = CompressibleFq12::mul_torus_compressed_elements(c1_pow, c1);
