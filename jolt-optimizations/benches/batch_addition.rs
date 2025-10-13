@@ -129,7 +129,7 @@ fn bench_row_dense_column_sparse(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
     group.sample_size(10);
 
-    for &(num_rows, total_cols, k, density) in &[(100, 10000, 32, 0.7)] {
+    for &(num_rows, total_cols, k, density) in &[(1000, 1000, 32, 0.7)] {
         let bases: Vec<G1Affine> = (0..total_cols).map(|_| G1Affine::rand(&mut rng)).collect();
 
         let mut row_lengths = Vec::with_capacity(num_rows);
