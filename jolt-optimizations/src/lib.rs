@@ -60,8 +60,8 @@ pub use dory_g2::{
 pub use batch_addition::{batch_g1_additions, batch_g1_additions_multi};
 
 pub use msm_bucket::{
-    batch_addition_matrix, batch_addition_matrix_u8, msm_rows_bucket_affine,
-    msm_rows_bucket_projective,
+    batch_addition_matrix, batch_addition_matrix_u8, batch_addition_matrix_u8_variable,
+    msm_rows_bucket_affine, msm_rows_bucket_projective,
 };
 pub use small_row::SmallRow;
 
