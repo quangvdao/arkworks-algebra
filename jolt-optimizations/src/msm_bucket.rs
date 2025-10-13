@@ -262,7 +262,7 @@ pub fn batch_addition_matrix_u8(
 
             if use_u16 {
                 let indices: Vec<u16> = chunk
-                    .par_iter()
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u16))
                     .collect();
@@ -297,7 +297,7 @@ pub fn batch_addition_matrix_u8(
                 }
             } else {
                 let indices: Vec<u32> = chunk
-                    .par_iter()
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u32))
                     .collect();
@@ -387,163 +387,73 @@ pub fn batch_addition_matrix_u8_variable(
 
             if use_u16 {
                 let indices: Vec<u16> = chunk
-                    .par_iter()
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u16))
                     .collect();
 
-                if indices.len() > 256 {
-                    const PARALLEL_CHUNK_SIZE: usize = 512;
-                    let partial_sums: Vec<G1Projective> = indices
-                        .par_chunks(PARALLEL_CHUNK_SIZE)
-                        .map(|chunk_indices| {
-                            let mut partial_acc = Bucket::<G1Config>::ZERO;
-                            let mut chunks_iter = chunk_indices.chunks_exact(ilp);
-                            for ch in &mut chunks_iter {
-                                partial_acc += bases[ch[0] as usize];
-                                if ilp > 1 {
-                                    partial_acc += bases[ch[1] as usize];
-                                }
-                                if ilp > 2 {
-                                    partial_acc += bases[ch[2] as usize];
-                                }
-                                if ilp > 3 {
-                                    partial_acc += bases[ch[3] as usize];
-                                }
-                                if ilp > 4 {
-                                    partial_acc += bases[ch[4] as usize];
-                                }
-                                if ilp > 5 {
-                                    partial_acc += bases[ch[5] as usize];
-                                }
-                                if ilp > 6 {
-                                    partial_acc += bases[ch[6] as usize];
-                                }
-                                if ilp > 7 {
-                                    partial_acc += bases[ch[7] as usize];
-                                }
-                            }
-                            for &j in chunks_iter.remainder() {
-                                partial_acc += bases[j as usize];
-                            }
-                            partial_acc.into()
-                        })
-                        .collect();
-
-                    let mut proj_acc: G1Projective = acc.into();
-                    for partial in partial_sums {
-                        proj_acc += partial;
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
                     }
-                    return proj_acc;
-                } else {
-                    let mut chunks_iter = indices.chunks_exact(ilp);
-                    for ch in &mut chunks_iter {
-                        acc += bases[ch[0] as usize];
-                        if ilp > 1 {
-                            acc += bases[ch[1] as usize];
-                        }
-                        if ilp > 2 {
-                            acc += bases[ch[2] as usize];
-                        }
-                        if ilp > 3 {
-                            acc += bases[ch[3] as usize];
-                        }
-                        if ilp > 4 {
-                            acc += bases[ch[4] as usize];
-                        }
-                        if ilp > 5 {
-                            acc += bases[ch[5] as usize];
-                        }
-                        if ilp > 6 {
-                            acc += bases[ch[6] as usize];
-                        }
-                        if ilp > 7 {
-                            acc += bases[ch[7] as usize];
-                        }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
                     }
-                    for &j in chunks_iter.remainder() {
-                        acc += bases[j as usize];
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
                     }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
                 }
             } else {
                 let indices: Vec<u32> = chunk
-                    .par_iter()
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, &opt)| opt.map(|kopt| (i * k + kopt as usize) as u32))
                     .collect();
 
-                if indices.len() > 256 {
-                    const PARALLEL_CHUNK_SIZE: usize = 512;
-                    let partial_sums: Vec<G1Projective> = indices
-                        .par_chunks(PARALLEL_CHUNK_SIZE)
-                        .map(|chunk_indices| {
-                            let mut partial_acc = Bucket::<G1Config>::ZERO;
-                            let mut chunks_iter = chunk_indices.chunks_exact(ilp);
-                            for ch in &mut chunks_iter {
-                                partial_acc += bases[ch[0] as usize];
-                                if ilp > 1 {
-                                    partial_acc += bases[ch[1] as usize];
-                                }
-                                if ilp > 2 {
-                                    partial_acc += bases[ch[2] as usize];
-                                }
-                                if ilp > 3 {
-                                    partial_acc += bases[ch[3] as usize];
-                                }
-                                if ilp > 4 {
-                                    partial_acc += bases[ch[4] as usize];
-                                }
-                                if ilp > 5 {
-                                    partial_acc += bases[ch[5] as usize];
-                                }
-                                if ilp > 6 {
-                                    partial_acc += bases[ch[6] as usize];
-                                }
-                                if ilp > 7 {
-                                    partial_acc += bases[ch[7] as usize];
-                                }
-                            }
-                            for &j in chunks_iter.remainder() {
-                                partial_acc += bases[j as usize];
-                            }
-                            partial_acc.into()
-                        })
-                        .collect();
-
-                    let mut proj_acc: G1Projective = acc.into();
-                    for partial in partial_sums {
-                        proj_acc += partial;
+                let mut chunks_iter = indices.chunks_exact(ilp);
+                for ch in &mut chunks_iter {
+                    acc += bases[ch[0] as usize];
+                    if ilp > 1 {
+                        acc += bases[ch[1] as usize];
                     }
-                    return proj_acc;
-                } else {
-                    let mut chunks_iter = indices.chunks_exact(ilp);
-                    for ch in &mut chunks_iter {
-                        acc += bases[ch[0] as usize];
-                        if ilp > 1 {
-                            acc += bases[ch[1] as usize];
-                        }
-                        if ilp > 2 {
-                            acc += bases[ch[2] as usize];
-                        }
-                        if ilp > 3 {
-                            acc += bases[ch[3] as usize];
-                        }
-                        if ilp > 4 {
-                            acc += bases[ch[4] as usize];
-                        }
-                        if ilp > 5 {
-                            acc += bases[ch[5] as usize];
-                        }
-                        if ilp > 6 {
-                            acc += bases[ch[6] as usize];
-                        }
-                        if ilp > 7 {
-                            acc += bases[ch[7] as usize];
-                        }
+                    if ilp > 2 {
+                        acc += bases[ch[2] as usize];
                     }
-                    for &j in chunks_iter.remainder() {
-                        acc += bases[j as usize];
+                    if ilp > 3 {
+                        acc += bases[ch[3] as usize];
                     }
+                    if ilp > 4 {
+                        acc += bases[ch[4] as usize];
+                    }
+                    if ilp > 5 {
+                        acc += bases[ch[5] as usize];
+                    }
+                    if ilp > 6 {
+                        acc += bases[ch[6] as usize];
+                    }
+                    if ilp > 7 {
+                        acc += bases[ch[7] as usize];
+                    }
+                }
+                for &j in chunks_iter.remainder() {
+                    acc += bases[j as usize];
                 }
             }
 
