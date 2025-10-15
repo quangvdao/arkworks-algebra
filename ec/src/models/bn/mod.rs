@@ -1,6 +1,6 @@
 use crate::{
     models::{short_weierstrass::SWCurveConfig, CurveConfig},
-    pairing::{MillerLoopOutput, Pairing, PairingOutput},
+    pairing::{CompressedPairing, MillerLoopOutput, Pairing, PairingOutput},
 };
 use ark_ff::{
     fields::{
@@ -195,6 +195,10 @@ pub fn raise_to_psi_six_pow<P: BnConfig>(f: Fp12<P::Fp12Config>) -> Option<Fp12<
     })
 }
 
+pub trait FromPsi6Pow<BnConfig> {
+    fn from_psi_six_pow(f: Fp12<P::Fp12Config>) -> Self;
+}
+
 pub trait BnConfig: 'static + Sized {
     /// The absolute value of the BN curve parameter `X`
     /// (as in `q = 36 X^4 + 36 X^3 + 24 X^2 + 6 X + 1`).
@@ -213,6 +217,7 @@ pub trait BnConfig: 'static + Sized {
     type Fp2Config: Fp2Config<Fp = Self::Fp>;
     type Fp6Config: Fp6Config<Fp2Config = Self::Fp2Config>;
     type Fp12Config: Fp12Config<Fp6Config = Self::Fp6Config>;
+    type CompressedFp12Config: FromPsi6Pow<Self>;
     type G1Config: SWCurveConfig<BaseField = Self::Fp>;
     type G2Config: SWCurveConfig<
         BaseField = Fp2<Self::Fp2Config>,
@@ -278,6 +283,13 @@ pub trait BnConfig: 'static + Sized {
         raise_to_psi_six_pow::<Self>(f.0)
             .map(pow_sixth_cyclotomic_polynomial_over_r_cyclotomic_optimized::<Self>)
             .map(PairingOutput)
+    }
+
+    fn compressed_final_exponentiation(
+        f: MillerLoopOutput<Bn<Self>>,
+    ) -> Option<Self::CompressedFp12Config> {
+        let val = pow_sixth_cyclotomic_polynomial_over_r::<Self>(f.0);
+        Some(Self::CompressedFp12Config::from_psi_six_pow(val))
     }
 }
 
@@ -354,4 +366,12 @@ impl<P: BnConfig> Pairing for Bn<P> {
     }
 }
 
-pub struct BNCompressedTargetField<P: BnConfig>(pub Fp12<P::Fp12Config>);
+impl<P: BnConfig> CompressedPairing for Bn<P> {
+    type CompressedTargetField = P::CompressedFp12Config;
+
+    fn compressed_final_exponentiation(
+        f: MillerLoopOutput<Self>,
+    ) -> Option<Self::CompressedTargetField> {
+        P::compressed_final_exponentiation(f)
+    }
+}
