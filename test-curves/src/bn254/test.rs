@@ -55,7 +55,7 @@ mod test {
         bn::{
             pow_sixth_cyclotomic_polynomial_over_r, raise_to_psi_six_pow, G1Prepared, G2Prepared,
         },
-        pairing::Pairing,
+        pairing::{CompressedPairing, Pairing},
     };
     use ark_ff::{
         AdditiveGroup, CyclotomicMultSubgroup, Field, Fp12Config, Fp6Config, MontFp, UniformRand,
@@ -63,10 +63,10 @@ mod test {
     use ark_std::{test_rng, vec::Vec};
 
     use crate::bn254::{
-        compressible_fq12_to_fq12, fq12_compressed_multi_pairing, fq12_to_compressible_fq12,
-        torus_compress_fq6, torus_compress_psi_6_pow_to_two_fq2, torus_decompress_fq6, Bn254,
-        CompressibleBn254, CompressibleConfig, CompressibleFq12, Config, Fq12, Fq12Config, Fq2,
-        Fq6, Fq6Config, G1Projective, G2Projective,
+        compressible_fq12_to_fq12, fq12_to_compressible_fq12, torus_compress_fq6,
+        torus_compress_psi_6_pow_to_two_fq2, torus_decompress_fq6, Bn254, CompressibleBn254,
+        CompressibleConfig, CompressibleFq12, Config, Fq12, Fq12Config, Fq2, Fq6, Fq6Config,
+        G1Projective, G2Projective,
     };
     use ark_ec::{pairing::*, CurveGroup, PrimeGroup};
 
@@ -271,7 +271,7 @@ mod test {
             let g1 = G1Projective::rand(&mut rng);
             let g2 = G2Projective::rand(&mut rng);
             let pairing_value = Bn254::pairing(g1, g2).0;
-            let compressed_pairing_value = fq12_compressed_multi_pairing([g1], [g2]);
+            let compressed_pairing_value = Bn254::compressed_pairing(g1, g2);
             assert_eq!(pairing_value, compressed_pairing_value.decompress_to_fq12());
         }
 
@@ -286,7 +286,7 @@ mod test {
                 .collect::<Vec<_>>();
             let pairing_value = Bn254::multi_pairing(g1.iter().cloned(), g2.iter().cloned()).0;
             let compressed_pairing_value =
-                fq12_compressed_multi_pairing(g1.iter().cloned(), g2.iter().cloned());
+                Bn254::compressed_multi_pairing(g1.iter().cloned(), g2.iter().cloned());
             assert_eq!(pairing_value, compressed_pairing_value.decompress_to_fq12());
         }
     }

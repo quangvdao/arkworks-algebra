@@ -1,6 +1,10 @@
+use ark_ec::bn::{Bn, FromPsi6Pow};
 use ark_ff::{AdditiveGroup, Field, Fp12, Fp12Config, Fp6Config, MontFp};
 
-use crate::bn254::{Fq, Fq2, Fq6, Fq6Config};
+use crate::{
+    bls12_381::Config,
+    bn254::{Fq, Fq2, Fq6, Fq6Config},
+};
 
 pub type Fq12 = Fp12<Fq12Config>;
 pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
@@ -19,27 +23,6 @@ static Q: [u64; 8] = [
 // https://eprint.iacr.org/2007/429.pdf Proposition 1
 #[derive(Clone, Copy)]
 pub struct CompressedFq12(pub (Fq2, Fq2));
-
-impl CompressedFq12 {
-    #[inline]
-    pub fn decompress_to_fq12(self) -> Fq12 {
-        compressible_fq12_to_fq12(self.decompress())
-    }
-
-    #[inline]
-    pub fn decompress(self) -> CompressibleFq12 {
-        // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
-        let c2 = (Fq2::from(3) * self.0 .0.square() + Fq6Config::NONRESIDUE)
-            * (Fq2::from(3) * self.0 .1 * Fq6Config::NONRESIDUE)
-                .inverse()
-                .unwrap();
-        CompressibleFq12::torus_decompress(Fq6 {
-            c0: self.0 .0,
-            c1: self.0 .1,
-            c2,
-        })
-    }
-}
 
 #[inline]
 pub fn torus_compress_fq6(element: Fq6) -> CompressedFq12 {
@@ -147,6 +130,36 @@ impl Fp12Config for CompressibleFq12Config {
         Fq6Config::mul_fp2_by_nonresidue_in_place(&mut fe.c1);
         Fq6Config::mul_fp2_by_nonresidue_in_place(&mut fe.c2);
         fe
+    }
+}
+
+impl FromPsi6Pow<Config> for CompressedFq12 {
+    fn from_psi_six_pow(value: Fq12) -> Self {
+        // TODO: reference
+        let compressible_value = fq12_to_compressible_fq12(value);
+        let fq6 = compressible_value.c0 / compressible_value.c1;
+        CompressedFq12((fq6.c0, fq6.c1))
+    }
+}
+
+impl CompressedFq12 {
+    #[inline]
+    pub fn decompress_to_fq12(self) -> Fq12 {
+        compressible_fq12_to_fq12(self.decompress())
+    }
+
+    #[inline]
+    pub fn decompress(self) -> CompressibleFq12 {
+        // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
+        let c2 = (Fq2::from(3) * self.0 .0.square() + Fq6Config::NONRESIDUE)
+            * (Fq2::from(3) * self.0 .1 * Fq6Config::NONRESIDUE)
+                .inverse()
+                .unwrap();
+        CompressibleFq12::torus_decompress(Fq6 {
+            c0: self.0 .0,
+            c1: self.0 .1,
+            c2,
+        })
     }
 }
 

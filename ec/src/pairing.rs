@@ -19,6 +19,29 @@ use zeroize::Zeroize;
 
 use crate::{AffineRepr, CurveGroup, PrimeGroup, VariableBaseMSM};
 
+pub trait CompressedPairing: Pairing {
+    type CompressedTargetField;
+
+    fn compressed_final_exponentiation(
+        f: MillerLoopOutput<Self>,
+    ) -> Option<Self::CompressedTargetField>;
+
+    fn compressed_multi_pairing(
+        a: impl IntoIterator<Item = impl Into<Self::G1Prepared>>,
+        b: impl IntoIterator<Item = impl Into<Self::G2Prepared>>,
+    ) -> Self::CompressedTargetField {
+        let miller_loop_output = Self::multi_miller_loop(a, b);
+        Self::compressed_final_exponentiation(miller_loop_output).unwrap()
+    }
+
+    fn compressed_pairing(
+        a: impl Into<Self::G1Prepared>,
+        b: impl Into<Self::G2Prepared>,
+    ) -> Self::CompressedTargetField {
+        Self::compressed_multi_pairing([a], [b])
+    }
+}
+
 /// Collection of types (mainly fields and curves) that together describe
 /// how to compute a pairing over a pairing-friendly curve.
 pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
