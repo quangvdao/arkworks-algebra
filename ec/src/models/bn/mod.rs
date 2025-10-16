@@ -195,8 +195,8 @@ pub fn raise_to_psi_six_pow<P: BnConfig>(f: Fp12<P::Fp12Config>) -> Option<Fp12<
     })
 }
 
-pub trait FromPsi6Pow<BnConfig> {
-    fn from_psi_six_pow(f: Fp12<P::Fp12Config>) -> Self;
+pub trait FromPsi6Pow<P: BnConfig> {
+    fn from_psi_six_pow(base: Fp12<P::Fp12Config>) -> Self;
 }
 
 pub trait BnConfig: 'static + Sized {

@@ -7,9 +7,9 @@ use ark_std::test_rng;
 #[cfg(feature = "bn254")]
 use ark_test_curves::bn254::Bn254;
 #[cfg(feature = "bn254")]
-use ark_test_curves::bn254::Fq2;
+use ark_test_curves::bn254::CompressedFq12;
 #[cfg(feature = "bn254")]
-use ark_test_curves::bn254::{fq12_compressed_multi_pairing, CompressedFq12};
+use ark_test_curves::bn254::Fq2;
 #[cfg(feature = "bn254")]
 use ark_test_curves::bn254::{fq12_compressed_pairing, G1Projective, G2Projective};
 #[cfg(feature = "bn254")]
