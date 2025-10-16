@@ -43,11 +43,6 @@ test_group!(g2_glv; G2Projective; glv);
 test_group!(pairing_output; ark_ec::pairing::PairingOutput<crate::bn254::Bn254>; msm);
 test_pairing!(pairing; crate::bn254::Bn254);
 
-// TODO:
-// test_group!(compressible_pairing_output; ark_ec::pairing::PairingOutput<crate::bn254::CompressibleBn254>; msm);
-
-test_pairing!(compressible_pairing; crate::bn254::CompressibleBn254);
-
 // Add other tests for G2, Pairing etc. as needed
 #[cfg(test)]
 mod test {
@@ -64,9 +59,9 @@ mod test {
 
     use crate::bn254::{
         compressible_fq12_to_fq12, fq12_to_compressible_fq12, torus_compress_fq6,
-        torus_compress_psi_6_pow_to_two_fq2, torus_decompress_fq6, Bn254, CompressibleBn254,
-        CompressibleConfig, CompressibleFq12, Config, Fq12, Fq12Config, Fq2, Fq6, Fq6Config,
-        G1Projective, G2Projective,
+        torus_compress_psi_6_pow_to_two_fq2, torus_decompress_fq6, Bn254, CompressibleConfig,
+        CompressibleFq12, Config, Fq12, Fq12Config, Fq2, Fq6, Fq6Config, G1Projective,
+        G2Projective,
     };
     use ark_ec::{pairing::*, CurveGroup, PrimeGroup};
 

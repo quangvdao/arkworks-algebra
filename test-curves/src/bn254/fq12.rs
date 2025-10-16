@@ -1,10 +1,7 @@
-use ark_ec::bn::{Bn, FromPsi6Pow};
+use ark_ec::bn::FromPsi6Pow;
 use ark_ff::{AdditiveGroup, Field, Fp12, Fp12Config, Fp6Config, MontFp};
 
-use crate::{
-    bls12_381::Config,
-    bn254::{Fq, Fq2, Fq6, Fq6Config},
-};
+use crate::bn254::{Config, Fq, Fq2, Fq6, Fq6Config};
 
 pub type Fq12 = Fp12<Fq12Config>;
 pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
@@ -137,8 +134,7 @@ impl FromPsi6Pow<Config> for CompressedFq12 {
     fn from_psi_six_pow(value: Fq12) -> Self {
         // TODO: reference
         let compressible_value = fq12_to_compressible_fq12(value);
-        let fq6 = compressible_value.c0 / compressible_value.c1;
-        CompressedFq12((fq6.c0, fq6.c1))
+        torus_compress_psi_6_pow_to_two_fq2(compressible_value)
     }
 }
 
