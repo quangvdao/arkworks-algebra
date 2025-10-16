@@ -195,8 +195,12 @@ pub fn raise_to_psi_six_pow<P: BnConfig>(f: Fp12<P::Fp12Config>) -> Option<Fp12<
     })
 }
 
-pub trait FromPsi6Pow<P: BnConfig> {
-    fn from_psi_six_pow(base: Fp12<P::Fp12Config>) -> Self;
+pub trait FromPsi6Pow<P: BnConfig>: Sized {
+    /// Compresses the psi^6 power of a Fp12 element to a CompressedFp12 element.
+    /// The default implementation returns None, which does not enable the compressed pairing feature.
+    fn from_psi_six_pow(_base: Fp12<P::Fp12Config>) -> Option<Self> {
+        None
+    }
 }
 
 pub trait BnConfig: 'static + Sized {
@@ -217,7 +221,7 @@ pub trait BnConfig: 'static + Sized {
     type Fp2Config: Fp2Config<Fp = Self::Fp>;
     type Fp6Config: Fp6Config<Fp2Config = Self::Fp2Config>;
     type Fp12Config: Fp12Config<Fp6Config = Self::Fp6Config>;
-    type CompressedFp12Config: FromPsi6Pow<Self>;
+    type CompressedFp12Config: FromPsi6Pow<Self> + Sized;
     type G1Config: SWCurveConfig<BaseField = Self::Fp>;
     type G2Config: SWCurveConfig<
         BaseField = Fp2<Self::Fp2Config>,
@@ -289,7 +293,7 @@ pub trait BnConfig: 'static + Sized {
         f: MillerLoopOutput<Bn<Self>>,
     ) -> Option<Self::CompressedFp12Config> {
         let val = pow_sixth_cyclotomic_polynomial_over_r::<Self>(f.0);
-        Some(Self::CompressedFp12Config::from_psi_six_pow(val))
+        Self::CompressedFp12Config::from_psi_six_pow(val)
     }
 }
 

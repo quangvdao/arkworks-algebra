@@ -131,10 +131,10 @@ impl Fp12Config for CompressibleFq12Config {
 }
 
 impl FromPsi6Pow<Config> for CompressedFq12 {
-    fn from_psi_six_pow(value: Fq12) -> Self {
+    fn from_psi_six_pow(value: Fq12) -> Option<Self> {
         // TODO: reference
         let compressible_value = fq12_to_compressible_fq12(value);
-        torus_compress_psi_6_pow_to_two_fq2(compressible_value)
+        Some(torus_compress_psi_6_pow_to_two_fq2(compressible_value))
     }
 }
 
