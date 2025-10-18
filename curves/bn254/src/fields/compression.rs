@@ -80,6 +80,26 @@ impl FromPsi6Pow<Config> for CompressedFq12 {
     }
 }
 
+impl CompressedFq12 {
+    #[inline]
+    pub fn decompress_to_fq12(self) -> Fq12 {
+        compressible_fq12_to_fq12(self.decompress())
+    }
+
+    #[inline]
+    pub fn decompress(self) -> CompressibleFq12 {
+        // https://eprint.iacr.org/2007/429.pdf p.10 equation (6)
+        let c2 = (Fq2::from(3) * self.0 .0.square() + Fq6Config::NONRESIDUE)
+            * (Fq2::from(3) * self.0 .1 * Fq6Config::NONRESIDUE)
+                .inverse()
+                .unwrap();
+        CompressibleFq12::torus_decompress(Fq6 {
+            c0: self.0 .0,
+            c1: self.0 .1,
+            c2,
+        })
+    }
+}
 
 #[inline]
 pub fn torus_compress_fq6(element: Fq6) -> CompressedFq12 {
