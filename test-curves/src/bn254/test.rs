@@ -223,41 +223,8 @@ mod test {
         }
     }
 
-    const D: [u64; 12] = [
-        0xe81bb482ccdf42b1,
-        0x5abf5cc4f49c36d4,
-        0xf1154e7e1da014fd,
-        0xdcc7b44c87cdbacf,
-        0xaaa441e3954bcf8a,
-        0x6b887d56d5095f23,
-        0x79581e16f3fd90c6,
-        0x3b1b1355d189227d,
-        0x4e529a5861876f6b,
-        0x6c0eb522d5b12278,
-        0x331ec15183177faf,
-        0x1baaa710b0759ad,
-    ];
-
-    const D_PRIME: [u64; 15] = [
-        0xcaa4152366144ab4,
-        0x114dc0ec2cab7ffd,
-        0x0cf0888c7a0ff6cf,
-        0x65c5644e949b6a90,
-        0x1be2458885117085,
-        0x5b35eb719e58db4b,
-        0x2566c550aeb7e0e2,
-        0x0c974024a316619f,
-        0xd147cb7d3a5203dc,
-        0x621d9bfed77c2ad0,
-        0x26473fbcd1c3ec1e,
-        0xe86518527b5e4036,
-        0x29259e9712ca7b71,
-        0x1891045f68d15763,
-        0x679dd974c68787,
-    ];
-
     #[test]
-    fn test_compressed_pairing_e2e() {
+    fn test_compressed_pairing() {
         let num_trials = 10;
         let mut rng = test_rng();
 
@@ -284,55 +251,21 @@ mod test {
                 Bn254::compressed_multi_pairing(g1.iter().cloned(), g2.iter().cloned());
             assert_eq!(pairing_value, compressed_pairing_value.decompress_to_fq12());
         }
-    }
 
-    #[test]
-    fn test_compressible_pairing() {
-        let num_trials = 100;
-        let mut rng = test_rng();
+        // This is more for documentation purposes. For the compressed pairing calculation, we swap the order of computing exponentiation by \Psi_6(q^2) and \Phi_6(q^2) (see documentation for their definitions). The Miller loop output is not in the cyclotomic subgroup of the right order where the optimization (defined in the CyclotomicMultSubgroup trait) can be applied.
         for _ in 0..num_trials {
             let g1 = G1Projective::rand(&mut rng);
             let g2 = G2Projective::rand(&mut rng);
-            let g1_prepared: G1Prepared<Config> = g1.clone().into();
-            let g2_prepared: G2Prepared<Config> = g2.clone().into();
-            // let fq12 = Fq12::rand(&mut rng);
-            let fq12 = Bn254::multi_miller_loop([g1], [g2]).0;
-            // let fq12 = Bn254::pairing(g1, g2).0;
-            let pairing_value = Bn254::pairing(g1, g2).0;
-            // let fq12 = Bn254::pairing(g1, g2).0;
 
-            // let compressed_pow = torus_compress_psi_6_pow(fq12);
-            // let psi_6_pow = raise_to_psi_six_pow::<Config>(fq12).unwrap();
-            // let decompressed_pow = compressed_pow.decompress();
-            // assert_eq!(psi_6_pow, fq12.pow(PSI_6));
-            // assert_eq!(decompressed_pow, psi_6_pow);
-
-            let pow = pow_sixth_cyclotomic_polynomial_over_r::<Config>(fq12);
-            // assert_eq!(pow, fq12.pow(D_PRIME));
-            let compressed_pow: crate::bn254::CompressedFq12 =
-                torus_compress_psi_6_pow_to_two_fq2(fq12_to_compressible_fq12(pow));
-            let pow = raise_to_psi_six_pow::<Config>(pow).unwrap();
-
-            // assert_eq!(pow, fq12.pow(PSI_6));
-
-            // TODO: this would fail
-            // let fq12 = Bn254::multi_miller_loop([g1], [g2]).0;
-            // // let fq12 = Bn254::pairing(g1, g2).0;
-
-            // assert_eq!(fq12.cyclotomic_inverse(), fq12.inverse());
-            // assert_eq!(fq12.cyclotomic_exp(PSI_6), fq12.pow(PSI_6));
-
-            let bench = raise_to_psi_six_pow::<Config>(fq12).unwrap();
-            assert_eq!(bench, fq12.pow(PSI_6));
-            // assert_eq!(
-            //     other.pow(D_PRIME),
-            //     raise_to_sixth_cyclotomic_polynomial::<CompressibleConfig>(other)
-            // );
-            let final_bench = pow_sixth_cyclotomic_polynomial_over_r::<Config>(bench);
-            assert_eq!(final_bench, bench.pow(D_PRIME));
-            // assert_eq!(pairing_value, final_bench);
-            assert_eq!(pow, pairing_value);
-            assert_eq!(compressible_fq12_to_fq12(compressed_pow.decompress()), pow);
+            let miller_loop_output = Bn254::multi_miller_loop([g1], [g2]).0;
+            assert_ne!(
+                miller_loop_output.cyclotomic_inverse(),
+                miller_loop_output.inverse()
+            );
+            assert_ne!(
+                miller_loop_output.cyclotomic_exp(PSI_6),
+                miller_loop_output.pow(PSI_6)
+            );
         }
     }
 }

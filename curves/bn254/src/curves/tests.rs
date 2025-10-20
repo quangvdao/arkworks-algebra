@@ -14,7 +14,7 @@ test_group!(g2_glv; G2Projective; glv);
 #[cfg(test)]
 mod test {
     use ark_ec::pairing::{CompressedPairing, Pairing};
-    use ark_ff::{AdditiveGroup, Field, UniformRand};
+    use ark_ff::{AdditiveGroup, CyclotomicMultSubgroup, Field, UniformRand};
     use ark_std::{test_rng, vec::Vec};
 
     use crate::{
@@ -208,6 +208,22 @@ mod test {
             let compressed_pairing_value =
                 Bn254::compressed_multi_pairing(g1.iter().cloned(), g2.iter().cloned());
             assert_eq!(pairing_value, compressed_pairing_value.decompress_to_fq12());
+        }
+
+        // This is more for documentation purposes. For the compressed pairing calculation, we swap the order of computing exponentiation by \Psi_6(q^2) and \Phi_6(q^2) (see documentation for their definitions). The Miller loop output is not in the cyclotomic subgroup of the right order where the optimization (defined in the CyclotomicMultSubgroup trait) can be applied.
+        for _ in 0..num_trials {
+            let g1 = G1Projective::rand(&mut rng);
+            let g2 = G2Projective::rand(&mut rng);
+
+            let miller_loop_output = Bn254::multi_miller_loop([g1], [g2]).0;
+            assert_ne!(
+                miller_loop_output.cyclotomic_inverse(),
+                miller_loop_output.inverse()
+            );
+            assert_ne!(
+                miller_loop_output.cyclotomic_exp(PSI_6),
+                miller_loop_output.pow(PSI_6)
+            );
         }
     }
 }
