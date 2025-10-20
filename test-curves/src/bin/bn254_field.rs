@@ -502,6 +502,7 @@ fn compute_frobenius_coeffs_for_compressible_fq12() {
 }
 
 fn main() {
+    // TODO: clean up this file.
     // let fq6_modulus = <Fq6Config as Fp6Config>::NONRESIDUE;
     // let sextic_non_residue_over_fq2 = find_sextic_non_residue_over_fq2();
     // println!(
