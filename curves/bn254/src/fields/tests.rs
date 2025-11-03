@@ -6,7 +6,7 @@ use ark_ff::{
 };
 use ark_std::{cmp::Ordering, ops::MulAssign};
 
-use crate::{Fq, Fq12, Fq2, Fq6, Fq6Config, Fr, CompressibleFq12};
+use crate::{CompressibleFq12, Fq, Fq12, Fq2, Fq6, Fq6Config, Fr};
 
 test_field!(fr; Fr; mont_prime_field);
 test_field!(fq; Fq; mont_prime_field);

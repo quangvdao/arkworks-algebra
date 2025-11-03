@@ -91,7 +91,8 @@ mod test {
             assert_eq!(compressed_prod, decompressed_fq6);
         }
 
-        // Test that the compression does not work with Fq12 as expected because the generator of the quadratic extension inside Fq12 is not of degree 2 over Fq2.
+        // Test that the compression does not work with Fq12 as expected because the generator of
+        // the quadratic extension inside Fq12 is not of degree 2 over Fq2.
         for _ in 0..num_trials {
             let fq12_ele = Fq12::rand(&mut rng);
             let c1 = fq12_ele.torus_compress_base_order_minus_one_pow();
@@ -169,7 +170,8 @@ mod test {
             assert_eq!(a_prime * b_prime, c_prime);
         }
 
-        // Check that converting an Fq12 element to a CompressibleFq12 element before compressing its psi_6 power works, where decompressing is simply converting back to an Fq12 element.
+        // Check that converting an Fq12 element to a CompressibleFq12 element before compressing
+        // its psi_6 power works, where decompressing is simply converting back to an Fq12 element.
         for _ in 0..num_trials {
             let a = Fq12::rand(&mut rng);
             let a_prime = fq12_to_compressible_fq12(a);
@@ -210,8 +212,11 @@ mod test {
             assert_eq!(pairing_value, compressed_pairing_value.decompress_to_fq12());
         }
 
-
-        // This is more for documentation purposes. For the compressed pairing calculation, we swap the order of computing exponentiation by \Psi_6(q^2) and \Phi_6(q^2) (see documentation for their definitions). The Miller loop output is not in the cyclotomic subgroup of the right order where the optimization (defined in the CyclotomicMultSubgroup trait) can be applied.
+        // This is more for documentation purposes. For the compressed pairing calculation, we swap
+        // the order of computing exponentiation by \Psi_6(q^2) and \Phi_6(q^2) (see documentation
+        // for their definitions). The Miller loop output is not in the cyclotomic subgroup of the
+        // right order where the optimization (defined in the CyclotomicMultSubgroup trait) can be
+        // applied.
         for _ in 0..num_trials {
             let g1 = G1Projective::rand(&mut rng);
             let g2 = G2Projective::rand(&mut rng);
