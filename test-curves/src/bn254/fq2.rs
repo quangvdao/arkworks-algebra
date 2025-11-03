@@ -1,4 +1,4 @@
-use ark_ff::{MontFp, fields::*};
+use ark_ff::{fields::*, MontFp};
 
 use crate::bn254::*;
 
