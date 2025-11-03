@@ -42,15 +42,17 @@ fn pairing_bench(compressed: bool, len: usize) -> impl FnOnce(&mut Criterion) {
                     (g1, g2)
                 },
                 |(g1, g2)| {
-                    black_box(|| {
-                        if compressed {
-                            Bn254::compressed_multi_pairing(g1, g2);
-                        } else {
-                            Bn254::multi_pairing(g1, g2);
-                        }
-                    })
+                    // NOTE: this will cause a problem if the following is wrapped in a black_box.
+                    // See related issue: https://github.com/bheisler/criterion.rs/issues/862
+                    // and the article on std::hint::black_box https://github.com/bheisler/criterion.rs/issues/862,
+                    // which the criterion black_box method is a wrapper of.
+                    if compressed {
+                        let _ = Bn254::compressed_multi_pairing(g1, g2);
+                    } else {
+                        let _ = Bn254::multi_pairing(g1, g2);
+                    }
                 },
-                BatchSize::SmallInput,
+                BatchSize::LargeInput,
             )
         });
     }
