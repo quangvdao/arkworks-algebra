@@ -34,10 +34,7 @@ pub mod fq12;
 #[cfg(feature = "bn254")] // Use the main bn254 feature
 pub use fq12::*;
 
-use ark_ec::{
-    bn::{pow_sixth_cyclotomic_polynomial_over_r, Bn, BnConfig, G1Prepared, G2Prepared, TwistType},
-    pairing::Pairing,
-};
+use ark_ec::bn::{Bn, BnConfig, TwistType};
 use ark_ff::MontFp;
 
 #[cfg(test)]
