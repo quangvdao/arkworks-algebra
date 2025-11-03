@@ -36,7 +36,7 @@ pub use fq12::*;
 
 use ark_ec::{
     bn::{pow_sixth_cyclotomic_polynomial_over_r, Bn, BnConfig, G1Prepared, G2Prepared, TwistType},
-    pairing::{CompressedPairing, Pairing},
+    pairing::Pairing,
 };
 use ark_ff::MontFp;
 
@@ -75,45 +75,9 @@ impl BnConfig for Config {
     type CompressedFp12Config = CompressedFq12;
 }
 
-const D_PRIME: [u64; 15] = [
-    0xcaa4152366144ab4,
-    0x114dc0ec2cab7ffd,
-    0x0cf0888c7a0ff6cf,
-    0x65c5644e949b6a90,
-    0x1be2458885117085,
-    0x5b35eb719e58db4b,
-    0x2566c550aeb7e0e2,
-    0x0c974024a316619f,
-    0xd147cb7d3a5203dc,
-    0x621d9bfed77c2ad0,
-    0x26473fbcd1c3ec1e,
-    0xe86518527b5e4036,
-    0x29259e9712ca7b71,
-    0x1891045f68d15763,
-    0x679dd974c68787,
-];
-
 pub type Bn254 = Bn<Config>;
 
 pub type G1Affine = bn::G1Affine<Config>;
 pub type G1Projective = bn::G1Projective<Config>;
 pub type G2Affine = bn::G2Affine<Config>;
 pub type G2Projective = bn::G2Projective<Config>;
-
-pub fn fq12_compressed_pairing(
-    a: impl Into<G1Prepared<Config>>,
-    b: impl Into<G2Prepared<Config>>,
-) -> CompressedFq12 {
-    // TODO: remove this
-    fq12_compressed_multi_pairing([a], [b])
-}
-
-pub fn fq12_compressed_multi_pairing(
-    a: impl IntoIterator<Item = impl Into<G1Prepared<Config>>>,
-    b: impl IntoIterator<Item = impl Into<G2Prepared<Config>>>,
-) -> CompressedFq12 {
-    // TODO: remove this
-    let miller_loop_output = Bn254::multi_miller_loop(a, b);
-    let pow = pow_sixth_cyclotomic_polynomial_over_r::<Config>(miller_loop_output.0);
-    torus_compress_psi_6_pow_to_two_fq2(fq12_to_compressible_fq12(pow))
-}
