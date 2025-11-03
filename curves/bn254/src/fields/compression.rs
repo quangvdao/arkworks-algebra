@@ -45,7 +45,13 @@ const COMPRESSIBLE_FROBENIUS_COEFFS: [Fq2; 4] = [
 impl Fp12Config for CompressibleFq12Config {
     type Fp6Config = Fq6Config;
 
-    // The 12th degree extension is generated as a quadratic extension over the 6th degree extension. Another way to think about this is that the field as a 12th deg extension over the base field is really the composite field of a quadratic extension and a cubic extension, with generators sqrt(\gamma) and cbrt(\gamma), respectively, where \gamma is a sextic non-residue in the base field (itself a second deg extension over the base field on which the bn254 curve is defined). Therefore, the quadratic non-residue that generates the 12th degree extension over the 6th deg base field is \gamma = Fq6::non_residue.
+    // The 12th degree extension is generated as a quadratic extension over the 6th degree
+    // extension. Another way to think about this is that the field as a 12th deg extension over the
+    // base field is really the composite field of a quadratic extension and a cubic extension, with
+    // generators sqrt(\gamma) and cbrt(\gamma), respectively, where \gamma is a sextic non-residue
+    // in the base field (itself a second deg extension over the base field on which the bn254 curve
+    // is defined). Therefore, the quadratic non-residue that generates the 12th degree extension
+    // over the 6th deg base field is \gamma = Fq6::non_residue.
     const NONRESIDUE: Fq6 = Fq6::new(<Fq6Config as Fp6Config>::NONRESIDUE, Fq2::ZERO, Fq2::ZERO);
 
     // TODO: need to implement this
