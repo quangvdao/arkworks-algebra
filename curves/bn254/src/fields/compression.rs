@@ -54,7 +54,6 @@ impl Fp12Config for CompressibleFq12Config {
     // over the 6th deg base field is \gamma = Fq6::non_residue.
     const NONRESIDUE: Fq6 = Fq6::new(<Fq6Config as Fp6Config>::NONRESIDUE, Fq2::ZERO, Fq2::ZERO);
 
-    // TODO: need to implement this
     const FROBENIUS_COEFF_FP12_C1: &'static [Fq2] = &[
         COMPRESSIBLE_FROBENIUS_COEFFS[0],
         COMPRESSIBLE_FROBENIUS_COEFFS[1],
@@ -80,7 +79,7 @@ impl Fp12Config for CompressibleFq12Config {
 
 impl FromPsi6Pow<Config> for CompressedFq12 {
     fn from_psi_six_pow(value: Fq12) -> Option<Self> {
-        // TODO: reference
+        // Reference: https://eprint.iacr.org/2007/429.pdf p.10 Proposition 1
         let compressible_value = fq12_to_compressible_fq12(value);
         Some(torus_compress_psi_6_pow_to_two_fq2(compressible_value))
     }
