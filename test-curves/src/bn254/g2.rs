@@ -6,7 +6,7 @@ use ark_ec::{
 };
 use ark_ff::{AdditiveGroup, BigInt, Field, MontFp, PrimeField, Zero};
 
-use crate::{Fq, Fq2, Fr};
+use crate::bn254::{Fq, Fq2, Fr};
 
 pub type G2Affine = Affine<Config>;
 
@@ -37,8 +37,7 @@ impl SWCurveConfig for Config {
     const COEFF_A: Fq2 = Fq2::ZERO;
 
     /// COEFF_B = 3/(u+9)
-    /// (19485874751759354771024239261021720505790618469301721065564631296452457478373,
-    /// 266929791119991161246907387137283842545076965332900288569378510910307636690)
+    /// (19485874751759354771024239261021720505790618469301721065564631296452457478373, 266929791119991161246907387137283842545076965332900288569378510910307636690)
     const COEFF_B: Fq2 = Fq2::new(
         MontFp!("19485874751759354771024239261021720505790618469301721065564631296452457478373"),
         MontFp!("266929791119991161246907387137283842545076965332900288569378510910307636690"),
@@ -148,7 +147,7 @@ fn p_power_endomorphism(p: &Affine<Config>) -> Affine<Config> {
 mod test {
 
     use super::*;
-    use crate::g2;
+    use crate::bn254::*;
     use ark_std::{rand::Rng, UniformRand};
 
     fn sample_unchecked() -> Affine<g2::Config> {
