@@ -1,12 +1,12 @@
+use crate::biginteger::{BigInt, SignedBigInt, S128, S64};
 use allocative::Allocative;
-use ark_std::cmp::Ordering;
-use ark_std::vec::Vec;
-use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use crate::biginteger::{BigInt, SignedBigInt, S64, S128};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
     Write,
 };
+use ark_std::cmp::Ordering;
+use ark_std::vec::Vec;
+use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// Compact signed big-integer parameterized by limb count `N` (total width = `N*64 + 32` bits).
 ///
@@ -312,7 +312,10 @@ impl<const N: usize> SignedBigIntHi32<N> {
     /// This ignores the sign; pair with `is_positive()` if you need a signed value.
     #[inline]
     pub fn magnitude_as_bigint_nplus1<const NPLUS1: usize>(&self) -> BigInt<NPLUS1> {
-        debug_assert!(NPLUS1 == N + 1, "NPLUS1 must be N+1 for SignedBigIntHi32 magnitude pack");
+        debug_assert!(
+            NPLUS1 == N + 1,
+            "NPLUS1 must be N+1 for SignedBigIntHi32 magnitude pack"
+        );
         let mut limbs = [0u64; NPLUS1];
         if N > 0 {
             limbs[..N].copy_from_slice(&self.magnitude_lo);
@@ -327,7 +330,10 @@ impl<const N: usize> SignedBigIntHi32<N> {
     /// Debug-asserts that M <= N.
     #[inline]
     pub fn zero_extend_from<const M: usize>(smaller: &SignedBigIntHi32<M>) -> SignedBigIntHi32<N> {
-        debug_assert!(M <= N, "cannot zero-extend: source has more limbs than destination");
+        debug_assert!(
+            M <= N,
+            "cannot zero-extend: source has more limbs than destination"
+        );
         if N == M {
             return SignedBigIntHi32::<N>::new(
                 // copy to avoid borrowing issues
@@ -357,7 +363,10 @@ impl<const N: usize> SignedBigIntHi32<N> {
     /// Debug-asserts that NPLUS1 == N + 1.
     #[inline]
     pub fn to_signed_bigint_nplus1<const NPLUS1: usize>(&self) -> SignedBigInt<NPLUS1> {
-        debug_assert!(NPLUS1 == N + 1, "to_signed_bigint_nplus1 requires NPLUS1 = N + 1");
+        debug_assert!(
+            NPLUS1 == N + 1,
+            "to_signed_bigint_nplus1 requires NPLUS1 = N + 1"
+        );
         let mut limbs = [0u64; NPLUS1];
         if N > 0 {
             limbs[..N].copy_from_slice(self.magnitude_lo());
@@ -579,7 +588,11 @@ impl<const N: usize> core::cmp::Ord for SignedBigIntHi32<N> {
             (false, true) => Ordering::Less,
             _ => {
                 let ord = self.compare_magnitudes(other);
-                if self.is_positive { ord } else { ord.reverse() }
+                if self.is_positive {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             },
         }
     }
