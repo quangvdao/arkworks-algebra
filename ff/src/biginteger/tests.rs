@@ -117,7 +117,10 @@ pub mod tests {
             limbs[1] = lo[1];
             limbs[2] = lo[2];
             limbs[3] = hi32;
-            (num_bigint::BigUint::from(crate::biginteger::BigInt::<4>(limbs)), v.is_positive())
+            (
+                num_bigint::BigUint::from(crate::biginteger::BigInt::<4>(limbs)),
+                v.is_positive(),
+            )
         }
 
         // Case 1: small i8 * b1-only rhs
@@ -774,7 +777,10 @@ pub mod tests {
         let b = S::<2>::from_u128(0x0000_0000_0000_0001_0000_0000_0000_0001);
         // Add and truncate to 1 limb
         // Respect BigInt::add_trunc contract by truncating rhs to 1 limb
-        let b1 = S::<1>::from_bigint(crate::biginteger::BigInt::<1>::new([b.magnitude.0[0]]), b.is_positive);
+        let b1 = S::<1>::from_bigint(
+            crate::biginteger::BigInt::<1>::new([b.magnitude.0[0]]),
+            b.is_positive,
+        );
         let r1 = a.add_trunc_mixed::<1, 1>(&b1);
         // expected low limb wrap of the low words, ignoring carry to limb1
         let expected_low = (0xffff_ffff_ffff_fffeu64).wrapping_add(0x0000_0000_0000_0001u64);
@@ -1020,24 +1026,44 @@ pub mod tests {
                     let mut b: BigInt<$m> = UniformRand::rand(&mut rng);
 
                     // Clamp low P limbs to avoid any carry across limb P-1 in add_trunc.
-                    let mut i = 0; while i < core::cmp::min($p, $n) { a.0[i] >>= 1; i += 1; }
-                    let mut j = 0; while j < core::cmp::min($p, $m) { b.0[j] >>= 1; j += 1; }
+                    let mut i = 0;
+                    while i < core::cmp::min($p, $n) {
+                        a.0[i] >>= 1;
+                        i += 1;
+                    }
+                    let mut j = 0;
+                    while j < core::cmp::min($p, $m) {
+                        b.0[j] >>= 1;
+                        j += 1;
+                    }
 
                     // Build rhs respecting M <= P
                     let (res, b_p): (BigInt<$p>, BigInt<$p>) = if $m <= $p {
                         let mut b_p = BigInt::<$p>::zero();
-                        let mut k = 0; while k < $m { b_p.0[k] = b.0[k]; k += 1; }
+                        let mut k = 0;
+                        while k < $m {
+                            b_p.0[k] = b.0[k];
+                            k += 1;
+                        }
                         (a.add_trunc::<$m, $p>(&b), b_p)
                     } else {
                         let mut bl = [0u64; $p];
-                        let mut t = 0; while t < $p { bl[t] = b.0[t]; t += 1; }
+                        let mut t = 0;
+                        while t < $p {
+                            bl[t] = b.0[t];
+                            t += 1;
+                        }
                         let b_trunc = BigInt::<$p>::new(bl);
                         (a.add_trunc::<$p, $p>(&b_trunc), b_trunc)
                     };
 
                     // Expected using low-P truncated operands (after clamping)
                     let mut a_p = BigInt::<$p>::zero();
-                    let mut u = 0; while u < core::cmp::min($p, $n) { a_p.0[u] = a.0[u]; u += 1; }
+                    let mut u = 0;
+                    while u < core::cmp::min($p, $n) {
+                        a_p.0[u] = a.0[u];
+                        u += 1;
+                    }
                     let a_bu = BigUint::from(a_p);
                     let b_bu = BigUint::from(b_p);
                     let modulus = BigUint::from(1u8) << (64 * $p);
@@ -1064,7 +1090,10 @@ pub mod tests {
             let mut a: BigInt<4> = UniformRand::rand(&mut rng);
             let mut b: BigInt<4> = UniformRand::rand(&mut rng);
             // Ensure no carry anywhere by masking all limbs to 62 bits
-            for i in 0..4 { a.0[i] &= (1u64 << 62) - 1; b.0[i] &= (1u64 << 62) - 1; }
+            for i in 0..4 {
+                a.0[i] &= (1u64 << 62) - 1;
+                b.0[i] &= (1u64 << 62) - 1;
+            }
             let r_trunc = a.add_trunc::<4, 4>(&b);
             let mut a2 = a;
             a2.add_assign_trunc::<4>(&b);
@@ -1080,7 +1109,10 @@ pub mod tests {
         for _ in 0..200 {
             let mut a: BigInt<4> = UniformRand::rand(&mut rng);
             let mut b: BigInt<4> = UniformRand::rand(&mut rng);
-            for i in 0..4 { a.0[i] &= (1u64 << 62) - 1; b.0[i] &= (1u64 << 62) - 1; }
+            for i in 0..4 {
+                a.0[i] &= (1u64 << 62) - 1;
+                b.0[i] &= (1u64 << 62) - 1;
+            }
             // Respect add_trunc contract by pre-truncating rhs to P limbs
             let b3 = crate::biginteger::BigInt::<3>::new([b.0[0], b.0[1], b.0[2]]);
             let r_trunc = a.add_trunc::<3, 3>(&b3);
@@ -1113,7 +1145,10 @@ pub mod tests {
         // Use values that don't overflow beyond N to respect debug contract
         let mut a = BigInt::<4>::new([u64::MAX; 4]);
         let mut b = BigInt::<4>::new([u64::MAX; 4]);
-        for i in 0..4 { a.0[i] >>= 1; b.0[i] >>= 1; }
+        for i in 0..4 {
+            a.0[i] >>= 1;
+            b.0[i] >>= 1;
+        }
         // P = 4: result should match BigUint addition modulo 2^256
         // add_assign_trunc debug-overflow behavior cannot be reliably asserted in this
         // environment without std; we validate the non-mutating truncated result above.
