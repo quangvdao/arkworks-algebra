@@ -209,7 +209,10 @@ impl<const N: usize> SignedBigInt<N> {
     /// Debug-asserts that M <= N.
     #[inline]
     pub fn zero_extend_from<const M: usize>(smaller: &SignedBigInt<M>) -> SignedBigInt<N> {
-        debug_assert!(M <= N, "cannot zero-extend: source has more limbs than destination");
+        debug_assert!(
+            M <= N,
+            "cannot zero-extend: source has more limbs than destination"
+        );
         let widened_mag = BigInt::<N>::zero_extend_from::<M>(&smaller.magnitude);
         SignedBigInt::from_bigint(widened_mag, smaller.is_positive)
     }
@@ -223,16 +226,25 @@ impl<const N: usize> SignedBigInt<N> {
     pub fn add_trunc<const M: usize>(&self, rhs: &SignedBigInt<N>) -> SignedBigInt<M> {
         if self.is_positive == rhs.is_positive {
             let mag = self.magnitude.add_trunc::<N, M>(&rhs.magnitude);
-            return SignedBigInt::<M> { magnitude: mag, is_positive: self.is_positive };
+            return SignedBigInt::<M> {
+                magnitude: mag,
+                is_positive: self.is_positive,
+            };
         }
         match self.magnitude.cmp(&rhs.magnitude) {
             Ordering::Greater | Ordering::Equal => {
                 let mag = self.magnitude.sub_trunc::<N, M>(&rhs.magnitude);
-                SignedBigInt::<M> { magnitude: mag, is_positive: self.is_positive }
+                SignedBigInt::<M> {
+                    magnitude: mag,
+                    is_positive: self.is_positive,
+                }
             },
             Ordering::Less => {
                 let mag = rhs.magnitude.sub_trunc::<N, M>(&self.magnitude);
-                SignedBigInt::<M> { magnitude: mag, is_positive: rhs.is_positive }
+                SignedBigInt::<M> {
+                    magnitude: mag,
+                    is_positive: rhs.is_positive,
+                }
             },
         }
     }
@@ -242,16 +254,25 @@ impl<const N: usize> SignedBigInt<N> {
     pub fn sub_trunc<const M: usize>(&self, rhs: &SignedBigInt<N>) -> SignedBigInt<M> {
         if self.is_positive != rhs.is_positive {
             let mag = self.magnitude.add_trunc::<N, M>(&rhs.magnitude);
-            return SignedBigInt::<M> { magnitude: mag, is_positive: self.is_positive };
+            return SignedBigInt::<M> {
+                magnitude: mag,
+                is_positive: self.is_positive,
+            };
         }
         match self.magnitude.cmp(&rhs.magnitude) {
             Ordering::Greater | Ordering::Equal => {
                 let mag = self.magnitude.sub_trunc::<N, M>(&rhs.magnitude);
-                SignedBigInt::<M> { magnitude: mag, is_positive: self.is_positive }
+                SignedBigInt::<M> {
+                    magnitude: mag,
+                    is_positive: self.is_positive,
+                }
             },
             Ordering::Less => {
                 let mag = rhs.magnitude.sub_trunc::<N, M>(&self.magnitude);
-                SignedBigInt::<M> { magnitude: mag, is_positive: !self.is_positive }
+                SignedBigInt::<M> {
+                    magnitude: mag,
+                    is_positive: !self.is_positive,
+                }
             },
         }
     }
@@ -265,16 +286,25 @@ impl<const N: usize> SignedBigInt<N> {
     ) -> SignedBigInt<P> {
         if self.is_positive == rhs.is_positive {
             let mag = self.magnitude.add_trunc::<M, P>(&rhs.magnitude);
-            return SignedBigInt::<P> { magnitude: mag, is_positive: self.is_positive };
+            return SignedBigInt::<P> {
+                magnitude: mag,
+                is_positive: self.is_positive,
+            };
         }
         match self.cmp_magnitude_mixed(rhs) {
             Ordering::Greater | Ordering::Equal => {
                 let mag = self.magnitude.sub_trunc::<M, P>(&rhs.magnitude);
-                SignedBigInt::<P> { magnitude: mag, is_positive: self.is_positive }
+                SignedBigInt::<P> {
+                    magnitude: mag,
+                    is_positive: self.is_positive,
+                }
             },
             Ordering::Less => {
                 let mag = rhs.magnitude.sub_trunc::<N, P>(&self.magnitude);
-                SignedBigInt::<P> { magnitude: mag, is_positive: rhs.is_positive }
+                SignedBigInt::<P> {
+                    magnitude: mag,
+                    is_positive: rhs.is_positive,
+                }
             },
         }
     }
@@ -373,16 +403,25 @@ impl<const N: usize> SignedBigInt<N> {
     ) -> SignedBigInt<P> {
         if self.is_positive != rhs.is_positive {
             let mag = self.magnitude.add_trunc::<M, P>(&rhs.magnitude);
-            return SignedBigInt::<P> { magnitude: mag, is_positive: self.is_positive };
+            return SignedBigInt::<P> {
+                magnitude: mag,
+                is_positive: self.is_positive,
+            };
         }
         match self.cmp_magnitude_mixed(rhs) {
             Ordering::Greater | Ordering::Equal => {
                 let mag = self.magnitude.sub_trunc::<M, P>(&rhs.magnitude);
-                SignedBigInt::<P> { magnitude: mag, is_positive: self.is_positive }
+                SignedBigInt::<P> {
+                    magnitude: mag,
+                    is_positive: self.is_positive,
+                }
             },
             Ordering::Less => {
                 let mag = rhs.magnitude.sub_trunc::<N, P>(&self.magnitude);
-                SignedBigInt::<P> { magnitude: mag, is_positive: !self.is_positive }
+                SignedBigInt::<P> {
+                    magnitude: mag,
+                    is_positive: !self.is_positive,
+                }
             },
         }
     }
@@ -696,7 +735,11 @@ impl<const N: usize> core::cmp::Ord for SignedBigInt<N> {
             (false, true) => Ordering::Less,
             _ => {
                 let ord = self.magnitude.cmp(&other.magnitude);
-                if self.is_positive { ord } else { ord.reverse() }
+                if self.is_positive {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             },
         }
     }

@@ -1,10 +1,10 @@
 use crate::biginteger::{S160, S224};
-use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use allocative::Allocative;
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
     Write,
 };
+use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// Compact signed integer optimized for the common `i8` case, widening to a 96-bit
 /// split representation when needed (low 64 bits in `large_lo`, next 32 bits in `large_hi`).
@@ -563,8 +563,8 @@ impl Mul<S160> for I8OrI96 {
                     let mut c2 = c1;
                     let r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
 
-                    let r3_low = ((c2 as u128)
-                        + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
+                    let r3_low =
+                        ((c2 as u128) + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
                     let hi32 = (r3_low & 0xFFFF_FFFF) as u32;
                     (r0, r1, r2, hi32)
                 }
@@ -588,8 +588,8 @@ impl Mul<S160> for I8OrI96 {
                 let mut r2 = mac_with_carry!(0u64, x0, b2, &mut c2);
                 r2 = mac_with_carry!(r2, x1, b1, &mut c2);
 
-                let r3_low = ((c2 as u128)
-                    + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
+                let r3_low =
+                    ((c2 as u128) + crate::biginteger::arithmetic::widening_mul(x1, b2)) as u64;
                 let hi32 = (r3_low & 0xFFFF_FFFF) as u32;
                 (r0, r1, r2, hi32)
             }

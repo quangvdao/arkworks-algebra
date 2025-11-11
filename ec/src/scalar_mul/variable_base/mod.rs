@@ -1,5 +1,5 @@
-use ark_ff::prelude::*;
 use ark_ff::biginteger::{S128, S64};
+use ark_ff::prelude::*;
 use ark_std::{
     borrow::Borrow,
     cfg_chunks, cfg_into_iter, cfg_iter,
@@ -640,9 +640,8 @@ pub fn msm_s64<V: VariableBaseMSM>(
                 Either::Right(b)
             }
         });
-    let (negative_scalars, non_negative_scalars): (Vec<u64>, Vec<u64>) = scalars
-        .iter()
-        .partition_map(|s| {
+    let (negative_scalars, non_negative_scalars): (Vec<u64>, Vec<u64>) =
+        scalars.iter().partition_map(|s| {
             let mag = s.magnitude_as_u64();
             if !s.sign() {
                 Either::Left(mag)
@@ -688,9 +687,8 @@ pub fn msm_s128<V: VariableBaseMSM>(
                 Either::Right(b)
             }
         });
-    let (negative_scalars, non_negative_scalars): (Vec<u128>, Vec<u128>) = scalars
-        .iter()
-        .partition_map(|s| {
+    let (negative_scalars, non_negative_scalars): (Vec<u128>, Vec<u128>) =
+        scalars.iter().partition_map(|s| {
             let mag = s.magnitude_as_u128();
             if !s.sign() {
                 Either::Left(mag)
