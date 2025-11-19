@@ -13,6 +13,13 @@ pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
 #[derive(Clone, Copy, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CompressedFq12(pub (Fq2, Fq2));
 
+impl Default for CompressedFq12 {
+    // Return a default compressed Fq12 in the case that the arguments to multi-pairing are empty. Note this default value is not the identity element of the group.
+    fn default() -> Self {
+        CompressedFq12((Fq2::ZERO, Fq2::ONE))
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct CompressibleFq12Config;
 
