@@ -10,7 +10,7 @@ use ark_serialize::{ CanonicalDeserialize, CanonicalSerialize};
 pub type CompressibleFq12 = Fp12<CompressibleFq12Config>;
 
 // https://eprint.iacr.org/2007/429.pdf Proposition 1
-#[derive(Clone, Copy, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CompressedFq12(pub (Fq2, Fq2));
 
 impl Default for CompressedFq12 {
