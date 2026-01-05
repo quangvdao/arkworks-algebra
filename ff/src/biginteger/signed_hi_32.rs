@@ -648,42 +648,6 @@ impl<const N: usize> Valid for SignedBigIntHi32<N> {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Symmetric mul: S160 * I8OrI96 -> S224 (for ergonomics)
-// ------------------------------------------------------------------------------------------------
-
-impl core::ops::Mul<crate::biginteger::I8OrI96> for S160 {
-    type Output = S224;
-    #[inline]
-    fn mul(self, rhs: crate::biginteger::I8OrI96) -> Self::Output {
-        rhs * self
-    }
-}
-
-impl core::ops::Mul<&crate::biginteger::I8OrI96> for S160 {
-    type Output = S224;
-    #[inline]
-    fn mul(self, rhs: &crate::biginteger::I8OrI96) -> Self::Output {
-        (*rhs) * self
-    }
-}
-
-impl core::ops::Mul<crate::biginteger::I8OrI96> for &S160 {
-    type Output = S224;
-    #[inline]
-    fn mul(self, rhs: crate::biginteger::I8OrI96) -> Self::Output {
-        rhs * *self
-    }
-}
-
-impl core::ops::Mul<&crate::biginteger::I8OrI96> for &S160 {
-    type Output = S224;
-    #[inline]
-    fn mul(self, rhs: &crate::biginteger::I8OrI96) -> Self::Output {
-        (*rhs) * *self
-    }
-}
-
-// ------------------------------------------------------------------------------------------------
 // From traits
 // ------------------------------------------------------------------------------------------------
 
