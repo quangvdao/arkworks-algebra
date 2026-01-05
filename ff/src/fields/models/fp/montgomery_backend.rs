@@ -49,7 +49,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// (a) `Self::MODULUS[N-1] < u64::MAX >> 2`, and
     /// (b) the bits of the modulus are not all 1.
     #[doc(hidden)]
-    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_mul_optimization::<Self, N>();
+    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_square_optimization::<Self, N>();
 
     /// Does the modulus have a spare unused bit
     ///
@@ -1101,61 +1101,39 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         }
     }
 
-    /// Multiply-assign by a RHS that is zero in its low N-2 limbs in Montgomery limbs,
-    /// and whose highest two limbs are provided by `hi` (low 64 bits map to limb N-2,
-    /// high 64 bits map to limb N-1). This is equivalent to K=2 non-zero high limbs.
-    #[inline]
-    pub const fn mul_assign_hi_u128(&mut self, hi: u128) {
-        // Construct a synthetic RHS by using the const CIOS with K=2, passing limbs directly.
-        // Leverage existing const CIOS specialized by K via a tiny adapter.
-        *self = self.const_cios_mul_rhs_hi2(hi as u64, (hi >> 64) as u64);
-    }
-
-    /// Returns self * rhs_high_limbs, where RHS is zero in low N-2 limbs and has its top two
-    /// limbs provided by `hi` (low 64 -> limb N-2, high 64 -> limb N-1). Equivalent to K=2.
-    /// At the cost 2 extra words of storage uses no bit shift instructions to extract higher limbs
-    /// as in mul_hi_u128
-    #[inline]
-    pub const fn mul_hi_bigint_u128(self, big_int_repre: [u64; 4]) -> Self {
-        self.const_cios_mul_rhs_hi2(big_int_repre[2], big_int_repre[3])
-    }
-    /// Returns self * rhs_high_limbs, where RHS is zero in low N-2 limbs and has its top two
-    /// limbs provided by `hi` (low 64 -> limb N-2, high 64 -> limb N-1). Equivalent to K=2.
-    #[inline]
-    pub const fn mul_hi_u128(self, hi: u128) -> Self {
-        self.const_cios_mul_rhs_hi2(hi as u64, (hi >> 64) as u64)
-    }
-
-    /// Const-capable CIOS fastpath specialized for exactly two high limbs (K=2), passed
-    /// directly as u64s instead of via an Fp operand. Assumes all lower limbs are zero.
-    #[inline]
+    /// Multiply by a sparse RHS with exactly 2 non-zero high limbs at positions N-2 and N-1.
+    /// Zero overhead when caller already has limbs separated.
+    ///
+    /// - `limb_lo`: The limb at position N-2 (lower of the two high limbs)
+    /// - `limb_hi`: The limb at position N-1 (highest limb)
+    #[inline(always)]
     #[allow(unused_assignments)]
-    const fn const_cios_mul_rhs_hi2(self, limb_n2: u64, limb_n1: u64) -> Self {
+    pub const fn mul_by_hi_2limbs(self, limb_lo: u64, limb_hi: u64) -> Self {
         let mut r = [0u64; N];
-        // i = N-2
+        // i = N-2: process limb_lo
         if N >= 2 {
             let mut carry1 = 0u64;
-            r[0] = mac!(r[0], (self.0).0[0], limb_n2, &mut carry1);
+            r[0] = mac!(r[0], (self.0).0[0], limb_lo, &mut carry1);
             let k = r[0].wrapping_mul(T::INV);
             let mut carry2 = 0u64;
             let _discard = mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
             crate::const_for!((j in 1..N) {
-                let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_n2, &mut carry1);
+                let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_lo, &mut carry1);
                 let new_rj_minus_1 = mac_with_carry!(new_rj, k, T::MODULUS.0[j], &mut carry2);
                 r[j] = new_rj;
                 r[j - 1] = new_rj_minus_1;
             });
             r[N - 1] = carry1.wrapping_add(carry2);
         }
-        // i = N-1
+        // i = N-1: process limb_hi
         {
             let mut carry1 = 0u64;
-            r[0] = mac!(r[0], (self.0).0[0], limb_n1, &mut carry1);
+            r[0] = mac!(r[0], (self.0).0[0], limb_hi, &mut carry1);
             let k = r[0].wrapping_mul(T::INV);
             let mut carry2 = 0u64;
             let _discard = mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
             crate::const_for!((j in 1..N) {
-                let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_n1, &mut carry1);
+                let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_hi, &mut carry1);
                 let new_rj_minus_1 = mac_with_carry!(new_rj, k, T::MODULUS.0[j], &mut carry2);
                 r[j] = new_rj;
                 r[j - 1] = new_rj_minus_1;
@@ -1167,108 +1145,12 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         out
     }
 
-    /// Multiply-assign by a BigInt<K> that populates the highest K Montgomery limbs of the RHS,
-    /// with all lower limbs zero. Lower 64 bits of `rhs_hi.0[0]` map to limb N-K, etc.
-    #[inline]
-    pub const fn mul_assign_hi_bigint<const K: usize>(&mut self, rhs_hi: &crate::BigInt<K>) {
-        if T::CAN_USE_NO_CARRY_MUL_OPT {
-            *self = self.const_cios_mul_rhs_hi::<K>(rhs_hi);
-        } else {
-            let (carry, res) = self.mul_without_cond_subtract_rhs_hi::<K>(rhs_hi);
-            *self = res;
-            if T::MODULUS_HAS_SPARE_BIT {
-                self.const_subtract_modulus();
-            } else {
-                self.const_subtract_modulus_with_carry(carry);
-            }
-        }
-    }
-
-    /// Returns self * BigInt<K> that populates the highest K Montgomery limbs of the RHS,
-    /// with all lower limbs zero.
-    #[inline]
-    pub const fn mul_hi_bigint<const K: usize>(self, rhs_hi: &crate::BigInt<K>) -> Self {
-        if T::CAN_USE_NO_CARRY_MUL_OPT {
-            self.const_cios_mul_rhs_hi::<K>(rhs_hi)
-        } else {
-            let (carry, res) = self.mul_without_cond_subtract_rhs_hi::<K>(rhs_hi);
-            if T::MODULUS_HAS_SPARE_BIT {
-                res.const_subtract_modulus()
-            } else {
-                res.const_subtract_modulus_with_carry(carry)
-            }
-        }
-    }
-
-    /// Const-capable CIOS kernel for a RHS with exactly K non-zero HIGH limbs provided via BigInt<K>.
-    #[inline]
-    #[allow(unused_assignments)]
-    const fn const_cios_mul_rhs_hi<const K: usize>(self, rhs_hi: &crate::BigInt<K>) -> Self {
-        let mut r = [0u64; N];
-        // Iterate high columns: t indexes 0..K-1 mapping to global i = N-K+t
-        crate::const_for!((t in 0..K) {
-            let b_i = rhs_hi.0[t];
-            let mut carry1 = 0u64;
-            r[0] = mac!(r[0], (self.0).0[0], b_i, &mut carry1);
-            let k = r[0].wrapping_mul(T::INV);
-            let mut carry2 = 0u64;
-            let _discard = mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
-            crate::const_for!((j in 1..N) {
-                let new_rj = mac_with_carry!(r[j], (self.0).0[j], b_i, &mut carry1);
-                let new_rj_minus_1 = mac_with_carry!(new_rj, k, T::MODULUS.0[j], &mut carry2);
-                r[j] = new_rj;
-                r[j - 1] = new_rj_minus_1;
-            });
-            r[N - 1] = carry1.wrapping_add(carry2);
-        });
-        let mut out = Self::new_unchecked(crate::BigInt::<N>(r));
-        out = out.const_subtract_modulus();
-        out
-    }
-
-    /// Two-phase (schoolbook+REDC) multiply with a RHS whose highest K limbs are provided
-    /// in `rhs_hi` and lower limbs are zero.
-    #[inline]
-    const fn mul_without_cond_subtract_rhs_hi<const K: usize>(
-        mut self,
-        rhs_hi: &crate::BigInt<K>,
-    ) -> (bool, Self) {
-        let (mut lo, mut hi) = ([0u64; N], [0u64; N]);
-        // Schoolbook: only columns j in [N-K, N)
-        crate::const_for!((i in 0..N) {
-            let mut carry = 0u64;
-            crate::const_for!((t in 0..K) {
-                let j = N - K + t;
-                let b = rhs_hi.0[t];
-                let k = i + j;
-                if k >= N {
-                    hi[k - N] = mac_with_carry!(hi[k - N], (self.0).0[i], b, &mut carry);
-                } else {
-                    lo[k] = mac_with_carry!(lo[k], (self.0).0[i], b, &mut carry);
-                }
-            });
-            hi[i] = carry;
-        });
-        // REDC: only i in [N-K, N)
-        let mut carry2 = 0u64;
-        crate::const_for!((i in 0..N) {
-            if i < N - K { /* skip */ } else {
-                let tmp = lo[i].wrapping_mul(T::INV);
-                let mut carry;
-                mac!(lo[i], tmp, T::MODULUS.0[0], &mut carry);
-                crate::const_for!((j in 1..N) {
-                    let k = i + j;
-                    if k >= N {
-                        hi[k - N] = mac_with_carry!(hi[k - N], tmp, T::MODULUS.0[j], &mut carry);
-                    }  else {
-                        lo[k] = mac_with_carry!(lo[k], tmp, T::MODULUS.0[j], &mut carry);
-                    }
-                });
-                hi[i] = adc!(hi[i], carry, &mut carry2);
-            }
-        });
-        crate::const_for!((i in 0..N) { (self.0).0[i] = hi[i]; });
-        (carry2 != 0, self)
+    /// Multiply by a u128 occupying the high two limb positions (N-2 and N-1).
+    /// Low 64 bits of `hi` map to position N-2, high 64 bits to position N-1.
+    /// Convenience wrapper around [`Self::mul_by_hi_2limbs`].
+    #[inline(always)]
+    pub const fn mul_hi_u128(self, hi: u128) -> Self {
+        self.mul_by_hi_2limbs(hi as u64, (hi >> 64) as u64)
     }
 
     /// Montgomery reduction for 2N-limb inputs (standard Montgomery reduction)
@@ -1340,14 +1222,9 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     #[inline(always)]
     pub fn mul_i64<const NPLUS1: usize>(self, other: i64) -> Self {
         debug_assert!(NPLUS1 == N + 1);
-        if other >= 0 {
-            // Multiply by the positive value directly
-            self.mul_u64::<NPLUS1>(other as u64)
-        } else {
-            // Multiply by the absolute value and then negate the result
-            // (-other) cannot overflow since other is not i64::MIN
-            -(self.mul_u64::<NPLUS1>((-other) as u64))
-        }
+        let abs: u64 = other.unsigned_abs();
+        let res = self.mul_u64::<NPLUS1>(abs);
+        if other < 0 { -res } else { res }
     }
 
     /// Multiply by an i128.
@@ -1355,27 +1232,13 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// otherwise falls back to the two-step Barrett reduction (`mul_u128_aux`).
     #[inline(always)]
     pub fn mul_i128<const NPLUS1: usize, const NPLUS2: usize>(self, other: i128) -> Self {
-        if other >= 0 {
-            let other_u128 = other as u128;
-            if other_u128 <= u64::MAX as u128 {
-                // Positive value fits in u64
-                self.mul_u64::<NPLUS1>(other_u128 as u64)
-            } else {
-                // Positive value requires u128 path
-                self.mul_u128_aux::<NPLUS1, NPLUS2>(other_u128)
-            }
+        let abs: u128 = other.unsigned_abs();
+        let res = if abs <= u64::MAX as u128 {
+            self.mul_u64::<NPLUS1>(abs as u64)
         } else {
-            // Negative value, compute absolute value as u128
-            // (-other) will not overflow since other != i128::MIN (checked by fit condition)
-            let abs_other = (-other) as u128;
-            if abs_other <= u64::MAX as u128 {
-                // Absolute value fits in u64
-                -(self.mul_u64::<NPLUS1>(abs_other as u64))
-            } else {
-                // Absolute value requires u128 path
-                -(self.mul_u128_aux::<NPLUS1, NPLUS2>(abs_other))
-            }
-        }
+            self.mul_u128_aux::<NPLUS1, NPLUS2>(abs)
+        };
+        if other < 0 { -res } else { res }
     }
 
     /// Multiply by a u128.
@@ -1833,6 +1696,21 @@ mod test {
     }
 
     #[test]
+    fn test_mul_i64_min_value() {
+        // Explicitly exercise i64::MIN edge case (negation would overflow).
+        let a = Fr::from(ArkBigInt::from(5u64));
+        let b_val = i64::MIN;
+
+        let expected_c = {
+            // |i64::MIN| = 2^63
+            let b_bigint = ArkBigInt::from(1u64 << 63);
+            -(a * Fr::from(b_bigint))
+        };
+        let result_c = a.mul_i64::<NPLUS1>(b_val);
+        assert_eq!(result_c, expected_c);
+    }
+
+    #[test]
     fn test_mul_u128_random() {
         let mut rng = test_rng();
         for _ in 0..100 {
@@ -1880,6 +1758,21 @@ mod test {
                 a, b_val, result_c, expected_c
             );
         }
+    }
+
+    #[test]
+    fn test_mul_i128_min_value() {
+        // Explicitly exercise i128::MIN edge case (negation would overflow).
+        let a = Fr::from(ArkBigInt::from(7u64));
+        let b_val = i128::MIN;
+
+        let expected_c = {
+            // |i128::MIN| = 2^127
+            let b_bigint = ArkBigInt::from(1u128 << 127);
+            -(a * Fr::from(b_bigint))
+        };
+        let result_c = a.mul_i128::<NPLUS1, NPLUS2>(b_val);
+        assert_eq!(result_c, expected_c);
     }
 
     // Removed trailing-zero API tests due to API consolidation

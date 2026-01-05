@@ -487,6 +487,17 @@ impl S64 {
     pub fn magnitude_as_u64(&self) -> u64 {
         self.magnitude.0[0]
     }
+
+    /// Construct from the difference of two u64 values: a - b.
+    /// Returns (a - b) with the appropriate sign.
+    #[inline(always)]
+    pub fn from_diff_u64s(a: u64, b: u64) -> Self {
+        if a < b {
+            Self::new([b - a], false)
+        } else {
+            Self::new([a - b], true)
+        }
+    }
 }
 
 impl S128 {

@@ -105,55 +105,6 @@ pub mod tests {
     }
 
     #[test]
-    fn test_i8_or_i96_mul_s160_edges() {
-        use crate::biginteger::{I8OrI96, S160, S224};
-
-        // Helper to convert S224 to BigUint reference value (unsigned magnitude) and sign
-        fn s224_to_biguint_and_sign(v: &S224) -> (num_bigint::BigUint, bool) {
-            let lo = v.magnitude_lo();
-            let hi32 = v.magnitude_hi() as u64;
-            let mut limbs = [0u64; 4];
-            limbs[0] = lo[0];
-            limbs[1] = lo[1];
-            limbs[2] = lo[2];
-            limbs[3] = hi32;
-            (
-                num_bigint::BigUint::from(crate::biginteger::BigInt::<4>(limbs)),
-                v.is_positive(),
-            )
-        }
-
-        // Case 1: small i8 * b1-only rhs
-        let k = I8OrI96::from_i8(7); // x1 = 0
-        let rhs = S160::new([0, 5], 0, true); // b0=0, b1=5, b2=0
-        let out = k * rhs;
-        let (mag_bu, sign) = s224_to_biguint_and_sign(&out);
-        let expected = num_bigint::BigUint::from(7u64) * (num_bigint::BigUint::from(5u64) << 64)
-            % (num_bigint::BigUint::from(1u8) << 224);
-        assert!(sign);
-        assert_eq!(mag_bu, expected);
-
-        // Case 2: large x with x1!=0, b2!=0, b1==0 (hits hi32 path)
-        // x = 2^80 + 3 => hi32 = 2^(80-64)=2^16, lo=3
-        let x = I8OrI96::from_i128(((1i128) << 80) + 3);
-        let rhs2 = S160::new([11, 0], 9, true); // b0=11, b1=0, b2=9
-        let out2 = x * rhs2;
-        let (mag_bu2, sign2) = s224_to_biguint_and_sign(&out2);
-        let x_bi = (num_bigint::BigUint::from(1u8) << 80) + num_bigint::BigUint::from(3u8);
-        let rhs_bi = (num_bigint::BigUint::from(9u8) << 128) + (num_bigint::BigUint::from(11u8));
-        let exp2 = x_bi * rhs_bi % (num_bigint::BigUint::from(1u8) << 224);
-        assert!(sign2);
-        assert_eq!(mag_bu2, exp2);
-
-        // Case 3: negative small i8 * nonzero rhs, zero result canonicalizes to positive
-        let k3 = I8OrI96::from_i8(-1);
-        let rhs3 = S160::zero();
-        let out3 = k3 * rhs3;
-        let (_, sign3) = s224_to_biguint_and_sign(&out3);
-        assert!(sign3);
-    }
-
-    #[test]
     fn test_s160_mul_s160_hi32_consistency() {
         use crate::biginteger::{BigInt, S160};
 

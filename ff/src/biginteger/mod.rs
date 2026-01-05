@@ -37,9 +37,6 @@ pub use signed::{SignedBigInt, S128, S192, S256, S64};
 pub mod signed_hi_32;
 pub use signed_hi_32::{SignedBigIntHi32, S160, S224, S96};
 
-pub mod i8_or_i96;
-pub use i8_or_i96::I8OrI96;
-
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Zeroize, Allocative)]
 pub struct BigInt<const N: usize>(pub [u64; N]);
 
