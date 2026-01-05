@@ -49,7 +49,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// (a) `Self::MODULUS[N-1] < u64::MAX >> 2`, and
     /// (b) the bits of the modulus are not all 1.
     #[doc(hidden)]
-    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_mul_optimization::<Self, N>();
+    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_square_optimization::<Self, N>();
 
     /// Does the modulus have a spare unused bit
     ///
@@ -1340,14 +1340,9 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     #[inline(always)]
     pub fn mul_i64<const NPLUS1: usize>(self, other: i64) -> Self {
         debug_assert!(NPLUS1 == N + 1);
-        if other >= 0 {
-            // Multiply by the positive value directly
-            self.mul_u64::<NPLUS1>(other as u64)
-        } else {
-            // Multiply by the absolute value and then negate the result
-            // (-other) cannot overflow since other is not i64::MIN
-            -(self.mul_u64::<NPLUS1>((-other) as u64))
-        }
+        let abs: u64 = other.unsigned_abs();
+        let res = self.mul_u64::<NPLUS1>(abs);
+        if other < 0 { -res } else { res }
     }
 
     /// Multiply by an i128.
@@ -1355,27 +1350,13 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// otherwise falls back to the two-step Barrett reduction (`mul_u128_aux`).
     #[inline(always)]
     pub fn mul_i128<const NPLUS1: usize, const NPLUS2: usize>(self, other: i128) -> Self {
-        if other >= 0 {
-            let other_u128 = other as u128;
-            if other_u128 <= u64::MAX as u128 {
-                // Positive value fits in u64
-                self.mul_u64::<NPLUS1>(other_u128 as u64)
-            } else {
-                // Positive value requires u128 path
-                self.mul_u128_aux::<NPLUS1, NPLUS2>(other_u128)
-            }
+        let abs: u128 = other.unsigned_abs();
+        let res = if abs <= u64::MAX as u128 {
+            self.mul_u64::<NPLUS1>(abs as u64)
         } else {
-            // Negative value, compute absolute value as u128
-            // (-other) will not overflow since other != i128::MIN (checked by fit condition)
-            let abs_other = (-other) as u128;
-            if abs_other <= u64::MAX as u128 {
-                // Absolute value fits in u64
-                -(self.mul_u64::<NPLUS1>(abs_other as u64))
-            } else {
-                // Absolute value requires u128 path
-                -(self.mul_u128_aux::<NPLUS1, NPLUS2>(abs_other))
-            }
-        }
+            self.mul_u128_aux::<NPLUS1, NPLUS2>(abs)
+        };
+        if other < 0 { -res } else { res }
     }
 
     /// Multiply by a u128.
@@ -1833,6 +1814,21 @@ mod test {
     }
 
     #[test]
+    fn test_mul_i64_min_value() {
+        // Explicitly exercise i64::MIN edge case (negation would overflow).
+        let a = Fr::from(ArkBigInt::from(5u64));
+        let b_val = i64::MIN;
+
+        let expected_c = {
+            // |i64::MIN| = 2^63
+            let b_bigint = ArkBigInt::from(1u64 << 63);
+            -(a * Fr::from(b_bigint))
+        };
+        let result_c = a.mul_i64::<NPLUS1>(b_val);
+        assert_eq!(result_c, expected_c);
+    }
+
+    #[test]
     fn test_mul_u128_random() {
         let mut rng = test_rng();
         for _ in 0..100 {
@@ -1880,6 +1876,21 @@ mod test {
                 a, b_val, result_c, expected_c
             );
         }
+    }
+
+    #[test]
+    fn test_mul_i128_min_value() {
+        // Explicitly exercise i128::MIN edge case (negation would overflow).
+        let a = Fr::from(ArkBigInt::from(7u64));
+        let b_val = i128::MIN;
+
+        let expected_c = {
+            // |i128::MIN| = 2^127
+            let b_bigint = ArkBigInt::from(1u128 << 127);
+            -(a * Fr::from(b_bigint))
+        };
+        let result_c = a.mul_i128::<NPLUS1, NPLUS2>(b_val);
+        assert_eq!(result_c, expected_c);
     }
 
     // Removed trailing-zero API tests due to API consolidation
