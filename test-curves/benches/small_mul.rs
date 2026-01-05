@@ -23,14 +23,6 @@ fn mul_small_bench(c: &mut Criterion) {
     // Convert u64 to Fr for standard multiplication benchmark
     let b_fr_s = b_u64_s.iter().map(|&b| Fr::from(b)).collect::<Vec<_>>();
 
-    let b_u64_as_u128_s = b_u64_s.iter().map(|&b| b as u128).collect::<Vec<_>>();
-
-    let b_i64_s = (0..SAMPLES).map(|_| rng.gen::<i64>()).collect::<Vec<_>>();
-
-    let b_u128_s = (0..SAMPLES).map(|_| rng.gen::<u128>()).collect::<Vec<_>>();
-
-    let b_i128_s = (0..SAMPLES).map(|_| rng.gen::<i128>()).collect::<Vec<_>>();
-
     // Generate another set of random Fr elements for addition
     let c_s = (0..SAMPLES).map(|_| Fr::rand(&mut rng)).collect::<Vec<_>>();
 
@@ -151,60 +143,6 @@ fn mul_small_bench(c: &mut Criterion) {
             criterion::black_box(a_s[i] * b_fr_s[i])
         })
     });
-
-    // Bench specialized high-limb RHS fastpaths (K = 1, 2)
-    // Construct BigInt<K> with random high limbs for K=1 and K=2
-    let b_k1_bigint = (0..SAMPLES)
-        .map(|_| BigInt::<1>([rng.gen::<u64>()]))
-        .collect::<Vec<_>>();
-    let b_k2_bigint = (0..SAMPLES)
-        .map(|_| BigInt::<2>([rng.gen::<u64>(), rng.gen::<u64>()]))
-        .collect::<Vec<_>>();
-
-    // group.bench_function("mul_assign_hi_bigint::<1>", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         let mut x = a_s[i];
-    //         x.mul_assign_hi_bigint::<1>(&b_k1_bigint[i]);
-    //         criterion::black_box(x)
-    //     })
-    // });
-
-    // group.bench_function("mul_assign_hi_bigint::<2>", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         let mut x = a_s[i];
-    //         x.mul_assign_hi_bigint::<2>(&b_k2_bigint[i]);
-    //         criterion::black_box(x)
-    //     })
-    // });
-
-    // group.bench_function("mul_hi_bigint::<1>", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         criterion::black_box(a_s[i].mul_hi_bigint::<1>(&b_k1_bigint[i]))
-    //     })
-    // });
-
-    // group.bench_function("mul_hi_bigint::<2>", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         criterion::black_box(a_s[i].mul_hi_bigint::<2>(&b_k2_bigint[i]))
-    //     })
-    // });
-
-    // group.bench_function("mul_u128 (u64 inputs)", |bench| {
-    //     let mut i = 0;
-    //     bench.iter(|| {
-    //         i = (i + 1) % SAMPLES;
-    //         // Call mul_u128 but provide a u64 input cast to u128
-    //         criterion::black_box(a_s[i].mul_u128::<5, 6>(b_u64_as_u128_s[i]))
-    //     })
-    // });
 
     // Benchmark the auxiliary function directly (assuming it's made public)
     // Note: Requires mul_u128_aux to be pub in montgomery_backend.rs

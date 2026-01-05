@@ -251,13 +251,23 @@ pub fn find_relaxed_naf(num: &[u64]) -> Vec<i8> {
     let mut res = find_naf(num);
 
     let len = res.len();
-    if res[len - 2] == 0 && res[len - 3] == -1 {
+    // For very small inputs, `find_naf` can return sequences of length < 3 (e.g. 0, 1, 2),
+    // in which case the rewrite below is not applicable.
+    if len >= 3 && res[len - 2] == 0 && res[len - 3] == -1 {
         res[len - 3] = 1;
         res[len - 2] = 1;
         res.resize(len - 1, 0);
     }
 
     res
+}
+
+#[test]
+fn test_find_relaxed_naf_small_inputs_do_not_panic() {
+    // These should not panic and should be correct.
+    assert_eq!(find_relaxed_naf(&[0u64]), Vec::<i8>::new());
+    assert_eq!(find_relaxed_naf(&[1u64]), vec![1i8]);
+    assert_eq!(find_relaxed_naf(&[2u64]), vec![0i8, 1i8]);
 }
 
 #[test]
