@@ -1153,6 +1153,14 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         self.mul_by_hi_2limbs(hi as u64, (hi >> 64) as u64)
     }
 
+    /// Multiply by a value stored as `[u64; 4]` where only indices 2 and 3 are non-zero.
+    /// Uses indices 2 and 3 as the high two limbs (positions N-2 and N-1).
+    /// Convenience wrapper around [`Self::mul_by_hi_2limbs`].
+    #[inline(always)]
+    pub const fn mul_hi_bigint_u128(self, big_int_repre: [u64; 4]) -> Self {
+        self.mul_by_hi_2limbs(big_int_repre[2], big_int_repre[3])
+    }
+
     /// Montgomery reduction for 2N-limb inputs (standard Montgomery reduction)
     /// Takes a 2N-limb BigInt that represents a product in "unreduced" form
     /// and reduces it to N limbs in Montgomery form.
