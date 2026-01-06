@@ -1145,16 +1145,15 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     /// - `limb_lo`: The limb at position N-2 (lower of the two high limbs)
     /// - `limb_hi`: The limb at position N-1 (highest limb)
     #[inline(always)]
-    #[allow(unused_assignments)]
     pub const fn mul_by_hi_2limbs(self, limb_lo: u64, limb_hi: u64) -> Self {
         let mut r = [0u64; N];
         // i = N-2: process limb_lo
         if N >= 2 {
-            let mut carry1 = 0u64;
+            let mut carry1;
             r[0] = mac!(r[0], (self.0).0[0], limb_lo, &mut carry1);
             let k = r[0].wrapping_mul(T::INV);
-            let mut carry2 = 0u64;
-            let _discard = mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
+            let mut carry2;
+            mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
             crate::const_for!((j in 1..N) {
                 let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_lo, &mut carry1);
                 let new_rj_minus_1 = mac_with_carry!(new_rj, k, T::MODULUS.0[j], &mut carry2);
@@ -1165,11 +1164,11 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         }
         // i = N-1: process limb_hi
         {
-            let mut carry1 = 0u64;
+            let mut carry1;
             r[0] = mac!(r[0], (self.0).0[0], limb_hi, &mut carry1);
             let k = r[0].wrapping_mul(T::INV);
-            let mut carry2 = 0u64;
-            let _discard = mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
+            let mut carry2;
+            mac!(r[0], k, T::MODULUS.0[0], &mut carry2);
             crate::const_for!((j in 1..N) {
                 let new_rj = mac_with_carry!(r[j], (self.0).0[j], limb_hi, &mut carry1);
                 let new_rj_minus_1 = mac_with_carry!(new_rj, k, T::MODULUS.0[j], &mut carry2);
@@ -1181,14 +1180,6 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         let mut out = Self::new_unchecked(crate::BigInt::<N>(r));
         out = out.const_subtract_modulus();
         out
-    }
-
-    /// Multiply by a u128 occupying the high two limb positions (N-2 and N-1).
-    /// Low 64 bits of `hi` map to position N-2, high 64 bits to position N-1.
-    /// Convenience wrapper around [`Self::mul_by_hi_2limbs`].
-    #[inline(always)]
-    pub const fn mul_hi_u128(self, hi: u128) -> Self {
-        self.mul_by_hi_2limbs(hi as u64, (hi >> 64) as u64)
     }
 
     /// Multiply by a value stored as `[u64; 4]` where only indices 2 and 3 are non-zero.
