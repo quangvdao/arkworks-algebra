@@ -29,7 +29,7 @@ zeroize = { workspace = true, features = ["zeroize_derive"] }
 num-bigint.workspace = true
 digest = { workspace = true, features = ["alloc"] }
 itertools.workspace = true
-allocative = "0.3.4"
+allocative = { version = "0.3.4", optional = true }
 
 [dev-dependencies]
 ark-test-curves = { workspace = true, features = [
