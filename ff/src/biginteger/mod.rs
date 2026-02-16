@@ -25,7 +25,8 @@ use ark_std::{
         Rng,
     },
     str::FromStr,
-    vec::*,
+    vec,
+    vec::Vec,
     Zero,
 };
 use num_bigint::BigUint;
