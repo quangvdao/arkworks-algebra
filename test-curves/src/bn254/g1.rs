@@ -34,6 +34,12 @@ impl SWCurveConfig for Config {
     /// AFFINE_GENERATOR_COEFFS = (G1_GENERATOR_X, G1_GENERATOR_Y)
     const GENERATOR: G1Affine = G1Affine::new_unchecked(G1_GENERATOR_X, G1_GENERATOR_Y);
 
+    /// Correctness:
+    /// The curve equation is y^2 = x^3 + b.
+    /// Substituting (0, 0) gives 0 = b, which is false for bn254.
+    /// Therefore, (0, 0) can safely represent infinity.
+    type ZeroFlag = ();
+
     #[inline(always)]
     fn mul_by_a(_: Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()

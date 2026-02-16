@@ -279,7 +279,7 @@ macro_rules! sqrt {
 macro_rules! prime_field {
     ($bench_group_name:expr, $F:ident) => {
         fn bigint(c: &mut $crate::criterion::Criterion) {
-            use ark_ff::{BigInteger, PrimeField};
+            use ark_ff::{BigInteger, PrimeField, Zero};
             type BigInt = <$F as PrimeField>::BigInt;
             const SAMPLES: usize = 1000;
 
@@ -410,7 +410,7 @@ macro_rules! prime_field {
                 let mut i = 0;
                 b.iter(|| {
                     i = (i + 1) % SAMPLES;
-                    <$F>::from_u64(u64s[i])
+                    <$F>::from(u64s[i])
                 })
             });
             conversions.finish()

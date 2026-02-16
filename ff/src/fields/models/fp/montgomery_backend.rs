@@ -1261,7 +1261,11 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         debug_assert!(NPLUS1 == N + 1);
         let abs: u64 = other.unsigned_abs();
         let res = self.mul_u64::<NPLUS1>(abs);
-        if other < 0 { -res } else { res }
+        if other < 0 {
+            -res
+        } else {
+            res
+        }
     }
 
     /// Multiply by an i128.
@@ -1275,7 +1279,11 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         } else {
             self.mul_u128_aux::<NPLUS1, NPLUS2>(abs)
         };
-        if other < 0 { -res } else { res }
+        if other < 0 {
+            -res
+        } else {
+            res
+        }
     }
 
     /// Multiply by a u128.

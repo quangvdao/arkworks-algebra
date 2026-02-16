@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rayon::prelude::*;
+use std::hint::black_box;
 
 use ark_bn254::{Fr, G2Affine, G2Projective};
 use ark_ec::{AffineRepr, PrimeGroup};

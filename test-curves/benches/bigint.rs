@@ -92,7 +92,7 @@ fn bigint_add_bench(c: &mut Criterion) {
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
             let mut result = a_bigints[i];
-            result.add_assign_trunc::<4, 4>(&b_bigints[i]);
+            result.add_assign_trunc::<4>(&b_bigints[i]);
             criterion::black_box(result)
         })
     });
@@ -103,7 +103,7 @@ fn bigint_add_bench(c: &mut Criterion) {
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
             let mut result = a_bigints[i];
-            result.add_assign_trunc::<4, 3>(&b_bigints[i]);
+            result.add_assign_trunc::<4>(&b_bigints[i]);
             criterion::black_box(result)
         })
     });
@@ -114,7 +114,7 @@ fn bigint_add_bench(c: &mut Criterion) {
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
             let mut result = a_bigints[i];
-            result.add_assign_trunc::<4, 5>(&b_bigints[i]);
+            result.add_assign_trunc::<4>(&b_bigints[i]);
             criterion::black_box(result)
         })
     });
@@ -148,7 +148,7 @@ fn bigint_add_bench(c: &mut Criterion) {
         bench.iter(|| {
             i = (i + 1) % SAMPLES;
             let mut result = max_bigints[i];
-            result.add_assign_trunc::<4, 4>(&max_bigints[i]);
+            result.add_assign_trunc::<4>(&max_bigints[i]);
             criterion::black_box(result)
         })
     });

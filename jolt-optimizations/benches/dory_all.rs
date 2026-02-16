@@ -4,7 +4,7 @@ use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::PrimeGroup;
 use ark_ff::PrimeField;
 use ark_std::UniformRand;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use jolt_optimizations::{
     dory_g1::{
         precompute_g1_generators, precompute_g1_generators_windowed2_signed,
@@ -18,6 +18,7 @@ use jolt_optimizations::{
     },
 };
 use rayon::prelude::*;
+use std::hint::black_box;
 use std::time::Instant;
 
 // ============================================================================

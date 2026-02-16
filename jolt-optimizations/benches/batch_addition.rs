@@ -1,12 +1,14 @@
 use ark_bn254::G1Affine;
 use ark_std::rand::RngCore;
 use ark_std::UniformRand;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use jolt_optimizations::{
     batch_addition_matrix, batch_addition_matrix_u8_variable, batch_g1_additions_multi,
     msm_rows_bucket_affine, msm_rows_bucket_projective, SmallRow,
 };
+use std::hint::black_box;
 
+#[allow(dead_code)]
 fn bench_msm_bucket_vs_batch(c: &mut Criterion) {
     let mut group = c.benchmark_group("msm_comparison");
     let mut rng = ark_std::test_rng();
@@ -72,6 +74,7 @@ fn bench_msm_bucket_vs_batch(c: &mut Criterion) {
     group.finish();
 }
 
+#[allow(dead_code)]
 fn bench_sparse_matrix_approaches(c: &mut Criterion) {
     let mut group = c.benchmark_group("sparse_matrix_large");
     let mut rng = ark_std::test_rng();
@@ -147,7 +150,7 @@ fn bench_row_dense_column_sparse(c: &mut Criterion) {
             row_indices.sort_unstable();
             row_indices.dedup();
 
-            let actual_row_len = row_indices.len();
+            let _actual_row_len = row_indices.len();
 
             let max_cycle = row_indices.last().map(|&idx| idx / k).unwrap_or(0);
             let cycles_for_row = max_cycle + 1;
