@@ -211,4 +211,15 @@ debug-assertions = true
 debug = true
 
 [patch.crates-io]
-ark-bn254 = { path = "./curves/bn254", features = ["curve", "scalar_field"] }
+ark-ec = { path = "./ec" }
+ark-ff = { path = "./ff" }
+ark-ff-asm = { path = "./ff-asm" }
+ark-poly = { path = "./poly" }
+ark-serialize = { path = "./serialize" }
+ark-algebra-test-templates = { path = "./test-templates" }
+ark-algebra-bench-templates = { path = "./bench-templates" }
+ark-test-curves = { path = "./test-curves" }
+ark-bn254 = { path = "./curves/bn254" }
+ark-std = { git = "https://github.com/arkworks-rs/std/" }
+ark-r1cs-std = { git = "https://github.com/arkworks-rs/r1cs-std" }
+ark-relations = { git = "https://github.com/arkworks-rs/snark" }

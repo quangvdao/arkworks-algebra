@@ -3,7 +3,7 @@ use crate::{
     SqrtPrecomputation, Zero,
 };
 
-#[cfg(feature = "default")]
+#[cfg(feature = "allocative")]
 use allocative::Allocative;
 
 use ark_serialize::{
@@ -42,6 +42,9 @@ pub trait FpConfig<const N: usize>: Send + Sync + 'static + Sized {
     /// Multiplicative identity of the field, i.e. the element `e`
     /// such that, for all elements `f` of the field, `e * f = f`.
     const ONE: Fp<Self, N>;
+
+    /// Negation of `Self::ONE`.
+    const NEG_ONE: Fp<Self, N>;
 
     /// Let `N` be the size of the multiplicative group defined by the field.
     /// Then `TWO_ADICITY` is the two-adicity of `N`, i.e. the integer `s`
@@ -117,7 +120,7 @@ pub trait FpConfig<const N: usize>: Send + Sync + 'static + Sized {
 
 /// Represents an element of the prime field F_p, where `p == P::MODULUS`.
 /// This type can represent elements in any field of size at most N * 64 bits.
-#[derive(Educe)]
+#[derive(educe::Educe)]
 #[educe(Default, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Fp<P: FpConfig<N>, const N: usize>(
     /// Contains the element in Montgomery form for efficient multiplication.
@@ -127,7 +130,7 @@ pub struct Fp<P: FpConfig<N>, const N: usize>(
     #[doc(hidden)] pub PhantomData<P>,
 );
 
-#[cfg(feature = "default")]
+#[cfg(feature = "allocative")]
 impl<P: FpConfig<N>, const N: usize> Allocative for Fp<P, N> {
     fn visit<'a, 'b: 'a>(&self, _visitor: &'a mut allocative::Visitor<'b>) {}
 }
@@ -231,6 +234,7 @@ impl<P: FpConfig<N>, const N: usize> Field for Fp<P, N> {
 
     const SQRT_PRECOMP: Option<SqrtPrecomputation<Self>> = P::SQRT_PRECOMP;
     const ONE: Self = P::ONE;
+    const NEG_ONE: Self = P::NEG_ONE;
 
     fn extension_degree() -> u64 {
         1

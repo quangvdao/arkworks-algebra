@@ -25,6 +25,10 @@ pub enum TwistType {
     D,
 }
 
+pub trait FromPsi6Pow<P: BnConfig>: Sized {
+    fn from_psi_six_pow(value: Fp12<P::Fp12Config>) -> Option<Self>;
+}
+
 pub trait BnConfig: 'static + Sized {
     /// The absolute value of the BN curve parameter `X`
     /// (as in `q = 36 X^4 + 36 X^3 + 24 X^2 + 6 X + 1`).

@@ -1,5 +1,5 @@
 use ark_ff::{BigInteger, PrimeField};
-use ark_std::{cfg_iter, cfg_iter_mut, vec::Vec};
+use ark_std::{cfg_iter, cfg_iter_mut, vec, vec::Vec};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;

@@ -1,6 +1,6 @@
 use crate::biginteger::{BigInt, BigInteger};
 
-#[cfg(feature = "default")]
+#[cfg(feature = "allocative")]
 use allocative::Allocative;
 
 use ark_serialize::{
@@ -19,7 +19,7 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 /// - Ordering treats `+0` and `-0` as equal: comparisons return `Ordering::Equal` when
 ///   both magnitudes are zero regardless of sign.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "default", derive(Allocative))]
+#[cfg_attr(feature = "allocative", derive(Allocative))]
 pub struct SignedBigInt<const N: usize> {
     pub magnitude: BigInt<N>,
     pub is_positive: bool,

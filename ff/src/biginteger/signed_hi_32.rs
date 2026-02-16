@@ -1,6 +1,6 @@
 use crate::biginteger::{BigInt, SignedBigInt, S128, S64};
 
-#[cfg(feature = "default")]
+#[cfg(feature = "allocative")]
 use allocative::Allocative;
 
 use ark_serialize::{
@@ -8,7 +8,7 @@ use ark_serialize::{
     Write,
 };
 use ark_std::cmp::Ordering;
-use ark_std::vec::Vec;
+use ark_std::{vec, vec::Vec};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// Compact signed big-integer parameterized by limb count `N` (total width = `N*64 + 32` bits).
@@ -29,7 +29,7 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 ///   distinguishes `+0` and `-0`, but ordering treats them as equal.
 /// - Specialized fast paths exist for `N ∈ {0,1,2}`; larger `N` uses a generic path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "default", derive(Allocative))]
+#[cfg_attr(feature = "allocative", derive(Allocative))]
 pub struct SignedBigIntHi32<const N: usize> {
     /// Little-endian low limbs: limb 0 = low 64 bits, limb 1 = next 64 bits, and so on
     magnitude_lo: [u64; N],

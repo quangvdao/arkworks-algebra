@@ -3,7 +3,7 @@ use crate::{
     const_for, UniformRand,
 };
 
-#[cfg(feature = "default")]
+#[cfg(feature = "allocative")]
 use allocative::Allocative;
 
 #[allow(unused)]
@@ -41,9 +41,16 @@ pub use signed::{SignedBigInt, S128, S192, S256, S64};
 pub mod signed_hi_32;
 pub use signed_hi_32::{SignedBigIntHi32, S160, S224, S96};
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Zeroize)]
-#[cfg_attr(feature = "default", derive(Allocative))]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "allocative", derive(Allocative))]
 pub struct BigInt<const N: usize>(pub [u64; N]);
+
+impl<const N: usize> Zeroize for BigInt<N> {
+    #[inline]
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
 
 impl<const N: usize> Default for BigInt<N> {
     fn default() -> Self {
@@ -198,6 +205,13 @@ impl<const N: usize> BigInt<N> {
         // To compute n % 4, we need to simply look at the
         // 2 least significant bits of n, and check their value mod 4.
         (((self.0[0] << 62) >> 62) % 4) as u8
+    }
+
+    #[doc(hidden)]
+    pub const fn mod_8(&self) -> u8 {
+        // To compute n % 8, we need to simply look at the
+        // 3 least significant bits of n, and check their value mod 8.
+        (((self.0[0] << 61) >> 61) % 8) as u8
     }
 
     /// Compute a right shift of `self`
