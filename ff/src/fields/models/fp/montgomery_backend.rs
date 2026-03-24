@@ -1023,11 +1023,12 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     ) -> Self {
         debug_assert!(NPLUS1 == N + 1);
         debug_assert!(NPLUS2 == N + 2);
-        let c1 = BigInt::<NPLUS1>(element.0[1..NPLUS2].try_into().unwrap()); // c1 has N+1 limbs
-        let r1 = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c1); // r1 = c1 mod p ([u64; N])
-                                                                 // Round 2: Reduce c2 = c_lo[0] + r1 * r.
-        let c2 = nplus1_pair_low_to_bigint::<N, NPLUS1>((element.0[0], r1.0)); // c2 has N+1 limbs
-        let r2 = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c2); // r2 = c2 mod p = c mod p ([u64; N])
+        let r1 = barrett_reduce_nplus1_low_pair_to_n::<T, N, NPLUS1>((
+            element.0[1],
+            element.0[2..NPLUS2].try_into().unwrap(),
+        )); // r1 = floor(c / 2^64) mod p
+        let r2 = barrett_reduce_nplus1_low_pair_to_n::<T, N, NPLUS1>((element.0[0], r1.0));
+        // r2 = c mod p
         Self::new_unchecked(r2)
     }
 
@@ -1418,17 +1419,6 @@ fn nplus1_pair_high_to_bigint<const N: usize, const NPLUS1: usize>(
     BigInt::<NPLUS1>(limbs)
 }
 
-#[inline(always)]
-fn nplus1_pair_low_to_bigint<const N: usize, const NPLUS1: usize>(
-    r_tmp: (u64, [u64; N]),
-) -> BigInt<NPLUS1> {
-    debug_assert!(NPLUS1 == N + 1);
-    let mut limbs = [0u64; NPLUS1];
-    limbs[0] = r_tmp.0;
-    limbs[1..NPLUS1].copy_from_slice(&r_tmp.1);
-    BigInt::<NPLUS1>(limbs)
-}
-
 /// Reduce an arbitrary-width little-endian limb slice by first consuming the
 /// largest safe top chunk, then folding the remaining low limbs one at a time.
 ///
@@ -1460,8 +1450,7 @@ fn barrett_reduce_limbs_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: usi
     let mut i = init_start;
     while i > 0 {
         i -= 1;
-        let c2 = nplus1_pair_low_to_bigint::<N, NPLUS1>((limbs[i], acc.0));
-        acc = barrett_reduce_nplus1_to_n::<T, N, NPLUS1>(c2);
+        acc = barrett_reduce_nplus1_low_pair_to_n::<T, N, NPLUS1>((limbs[i], acc.0));
     }
 
     acc
@@ -1653,17 +1642,20 @@ fn sub_bigint_plus_one_prime<const N: usize>(
 /// Output is the N-limb result `[u64; N]`.
 #[unroll_for_loops(4)]
 #[inline(always)]
-fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: usize>(
-    c: BigInt<NPLUS1>,
+fn barrett_reduce_nplus1_low_pair_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: usize>(
+    c: (u64, [u64; N]),
 ) -> BigInt<N> {
     debug_assert!(NPLUS1 == N + 1, "NPLUS1 must be N + 1 for this function");
+    let (c_lo, c_hi_n) = c;
+
+    let high_limb = c_hi_n[N - 1];
+    let second_high_limb = c_hi_n.get(N.wrapping_sub(2)).copied().unwrap_or(c_lo);
+
     let tilde_c: u64 = if T::MODULUS_HAS_SPARE_BIT {
-        let high_limb = c.0[N];
-        let second_high_limb = c.0[N - 1];
         (high_limb << T::MODULUS_NUM_SPARE_BITS)
             + (second_high_limb >> (64 - T::MODULUS_NUM_SPARE_BITS))
     } else {
-        c.0[N]
+        high_limb
     };
 
     // For primes where the Barrett estimate can underestimate by 2, use
@@ -1683,12 +1675,8 @@ fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: us
     let mut m2p = nplus1_pair_high_to_bigint::<N, NPLUS1>(T::MODULUS_TIMES_2_NPLUS1);
     m2p.mul_u64_in_place(m);
 
-    let m_times_2p = (
-        m2p.0[0..N].try_into().unwrap(),
-        m2p.0[N],
-    );
-    let (r_tmp, r_tmp_borrow) =
-        sub_bigint_plus_one_prime((c.0[0], c.0[1..N + 1].try_into().unwrap()), m_times_2p);
+    let m_times_2p = (m2p.0[0..N].try_into().unwrap(), m2p.0[N]);
+    let (r_tmp, r_tmp_borrow) = sub_bigint_plus_one_prime((c_lo, c_hi_n), m_times_2p);
 
     let r_tmp_bigint = if T::BARRETT_NEEDS_CEIL && r_tmp_borrow {
         // m overestimated q by 1, so r underflowed. Add 2p to correct.
@@ -1705,6 +1693,17 @@ fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: us
     };
 
     barrett_cond_subtract::<T, N, NPLUS1>(r_tmp_bigint)
+}
+
+#[unroll_for_loops(4)]
+#[inline(always)]
+fn barrett_reduce_nplus1_to_n<T: MontConfig<N>, const N: usize, const NPLUS1: usize>(
+    c: BigInt<NPLUS1>,
+) -> BigInt<N> {
+    barrett_reduce_nplus1_low_pair_to_n::<T, N, NPLUS1>((
+        c.0[0],
+        c.0[1..N + 1].try_into().unwrap(),
+    ))
 }
 
 #[cfg(test)]
